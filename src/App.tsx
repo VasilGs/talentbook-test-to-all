@@ -277,6 +277,31 @@ export default function App() {
   }
 
   // Fetch jobs when user logs in and navigates to search page
+ useEffect(() => {
+    let mounted = true
+    supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return
+      const u = data.session?.user ?? null
+      setUser(u)
+      setLoading(false)
+      if (u && !routed.current) {
+        routed.current = true
+        routeByRole(u.id)
+      }
+    })
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      const u = session?.user ?? null
+      setUser(u)
+      if (u && !routed.current) {
+        routed.current = true
+        routeByRole(u.id)
+      }
+    })
+    return () => {
+      mounted = false
+      sub.subscription.unsubscribe()
+    }
+  }, [])
   useEffect(() => {
     if (user && currentPage === 'search-jobs') {
       fetchJobs()
