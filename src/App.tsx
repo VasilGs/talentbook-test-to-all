@@ -75,7 +75,9 @@ export default function App() {
   const [user, setUser] = useState<import('@supabase/supabase-js').User | null>(null);
   const [tempSignupData, setTempSignupData] = useState<SignupData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState<'home' | 'search-jobs' | 'complete-profile' | 'user-profile'>(  'home');
+    const navigate = useNavigate()
+
+  const [currentPage, setCurrentPage] = useState<'home' | 'search-jobs' | 'complete-profile' | 'user-profile'>('home');
   const [userProfileComplete, setUserProfileComplete] = useState(false);
   const [companyData, setCompanyData] = useState<CompanyData | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
