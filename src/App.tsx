@@ -1,4 +1,4 @@
-import React, { useState, useEffect,  } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Search, Users, Briefcase, Star, Loader2, X, Check } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
 import { JobCandidateAnimation } from './components/job-candidate-animation';
