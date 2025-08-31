@@ -3,6 +3,7 @@
 import { buttonVariants } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { StripeCheckout } from "../StripeCheckout";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { cn } from "@/lib/utils";
 import { motion } from "motion/react";
@@ -12,6 +13,7 @@ import confetti from "canvas-confetti";
 import NumberFlow from "@number-flow/react";
 import { Briefcase, Users, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { stripeProducts, getProductsByCategory, formatPrice } from "../../stripe-config";
 
 interface PricingPlan {
   name: string;
@@ -27,14 +29,14 @@ interface PricingPlan {
 }
 
 interface PricingProps {
-  plans: PricingPlan[];
+  plans?: PricingPlan[];
   title?: string;
   description?: string;
   onViewAddOns?: () => void;
 }
 
 export function Pricing({
-  plans,
+  plans = [],
   title = "Simple, Transparent Pricing",
   description = "Choose the plan that works for you\nAll plans include access to our platform, lead generation tools, and dedicated support.",
   onViewAddOns,
@@ -43,6 +45,7 @@ export function Pricing({
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const switchRef = useRef<HTMLButtonElement>(null);
   const [selectedUserType, setSelectedUserType] = useState<'job_seeker' | 'employer'>('job_seeker');
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
 
   const handleToggle = (checked: boolean) => {
     setIsMonthly(!checked);
@@ -73,8 +76,20 @@ export function Pricing({
     }
   };
 
-  // Filter plans based on selected user type
-  const filteredPlans = plans.filter(plan => plan.userType === selectedUserType);
+  // Get subscription plans from Stripe config
+  const subscriptionPlans = getProductsByCategory('subscription').filter(product => {
+    // Filter by user type based on product name
+    if (selectedUserType === 'job_seeker') {
+      return product.name.includes('Candidates')
+    } else {
+      return product.name.includes('Employer')
+    }
+  })
+
+  const handleCheckoutError = (error: string) => {
+    setCheckoutError(error)
+    setTimeout(() => setCheckoutError(null), 5000)
+  }
 
   return (
     <div className="py-16 lg:py-24">
@@ -115,6 +130,14 @@ export function Pricing({
         </div>
       </div>
 
+      {/* Error Message */}
+      {checkoutError && (
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mb-8">
+          <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+            <p className="text-red-400 text-sm text-center">{checkoutError}</p>
+          </div>
+        </div>
+      )}
       <div className="flex justify-center items-center mb-10 space-x-4">
         <span className="text-white font-medium">Monthly</span>
         <Label>
@@ -131,7 +154,7 @@ export function Pricing({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        {filteredPlans.map((plan, index) => (
+        {subscriptionPlans.map((plan, index) => (
           <motion.div
             key={index}
             initial={{ y: 50, opacity: 0 }}
@@ -140,8 +163,8 @@ export function Pricing({
                 ? {
                     y: plan.isPopular ? -20 : 0,
                     opacity: 1,
-                    x: filteredPlans.length === 3 ? (index === 2 ? -30 : index === 0 ? 30 : 0) : 0,
-                    scale: filteredPlans.length === 3 && (index === 0 || index === 2) ? 0.94 : 1.0,
+                    x: subscriptionPlans.length === 3 ? (index === 2 ? -30 : index === 0 ? 30 : 0) : 0,
+                    scale: subscriptionPlans.length === 3 && (index === 0 || index === 2) ? 0.94 : 1.0,
                   }
                 : { y: 0, opacity: 1 }
             }
@@ -156,15 +179,15 @@ export function Pricing({
             }}
             className={cn(
               `rounded-2xl border p-8 bg-white/5 backdrop-blur-sm text-center lg:flex lg:flex-col lg:justify-center relative`,
-              plan.isPopular ? "border-[#FFC107] border-2" : "border-white/20",
+              plan.popular ? "border-[#FFC107] border-2" : "border-white/20",
               "flex flex-col",
-              !plan.isPopular && "mt-5",
-              filteredPlans.length === 3 && (index === 0 || index === 2)
+              !plan.popular && "mt-5",
+              subscriptionPlans.length === 3 && (index === 0 || index === 2)
                 ? "z-0 transform translate-x-0 translate-y-0"
                 : "z-10",
             )}
           >
-            {plan.isPopular && (
+            {plan.popular && (
               <div className="absolute top-0 right-0 bg-[#FFC107] py-1 px-3 rounded-bl-xl rounded-tr-xl flex items-center">
                 <Star className="text-white h-4 w-4 fill-current" />
                 <span className="text-black ml-1 font-sans font-semibold text-sm">
@@ -180,7 +203,7 @@ export function Pricing({
                 <span className="text-5xl font-bold tracking-tight text-white">
                   <NumberFlow
                     value={
-                      isMonthly ? Number(plan.price) : Number(plan.yearlyPrice)
+                      isMonthly ? plan.price / 100 : (plan.price * 12 * 0.8) / 100
                     }
                     format={{
                       style: "currency",
@@ -197,9 +220,9 @@ export function Pricing({
                     className="font-variant-numeric: tabular-nums"
                   />
                 </span>
-                {plan.period !== "Next 3 months" && (
+                {plan.mode === 'subscription' && (
                   <span className="text-sm font-semibold leading-6 tracking-wide text-gray-400">
-                    / {plan.period}
+                    / month
                   </span>
                 )}
               </div>
@@ -209,30 +232,32 @@ export function Pricing({
               </p>
 
               <ul className="mt-5 gap-3 flex flex-col">
-                {plan.features.map((feature, idx) => (
+                {plan.description.split('.').filter(f => f.trim()).map((feature, idx) => (
                   <li key={idx} className="flex items-start gap-3">
                     <Check className="h-5 w-5 text-red-400 mt-0.5 flex-shrink-0" />
-                    <span className="text-left text-gray-300">{feature}</span>
+                    <span className="text-left text-gray-300">{feature.trim()}</span>
                   </li>
                 ))}
               </ul>
 
               <hr className="w-full my-6 border-white/20" />
 
-              <button
+              <StripeCheckout
+                product={plan}
+                onError={handleCheckoutError}
                 className={cn(
                   buttonVariants({
                     variant: "outline",
                   }),
                   "group relative w-full gap-2 overflow-hidden text-lg font-semibold tracking-tighter",
                   "transform-gpu ring-offset-current transition-all duration-300 ease-out hover:ring-2 hover:ring-[#FFC107] hover:ring-offset-1",
-                  plan.isPopular
+                  plan.popular
                     ? "bg-[#FFC107] text-black border-[#FFC107] hover:bg-[#FFB300]"
                     : "bg-transparent text-white border-white/30 hover:bg-[#FFC107] hover:text-black hover:border-[#FFC107]"
                 )}
               >
-                {plan.buttonText}
-              </button>
+                Get Started
+              </StripeCheckout>
               <p className="mt-4 text-xs leading-5 text-gray-400">
                 {plan.description}
               </p>
@@ -254,18 +279,6 @@ export function Pricing({
         </div>
       )}
 
-      {/* New button for Add-ons */}
-      {onViewAddOns && (
-        <div className="mt-12 text-center">
-          <Button
-            onClick={onViewAddOns}
-            className="bg-[#FFC107] hover:bg-[#FFB300] text-black px-8 py-4 rounded-lg font-semibold transition-all duration-200 hover:shadow-lg hover:shadow-[#FFC107]/25 text-lg flex items-center justify-center mx-auto space-x-3"
-          >
-            <Zap className="w-6 h-6" />
-            <span>Explore Premium Add-ons</span>
-          </Button>
-        </div>
-      )}
     </div>
   );
 }
