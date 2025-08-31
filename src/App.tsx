@@ -302,6 +302,72 @@ export default function App() {
       sub.subscription.unsubscribe()
     }
   }, [])
+  sync function routeByRole(userId: string) {
+    const type = await getUserType(userId)
+    if (type === 'company') {
+      // Optional: enforce completion first
+      if (await isCompanyProfileComplete(userId)) {
+        navigate('/company/profile', { replace: true })
+      } else {
+        navigate('/company/complete', { replace: true })
+      }
+      return
+    }
+    if (type === 'job_seeker') {
+      if (await isSeekerProfileComplete(userId)) {
+        navigate('/seeker/profile', { replace: true })
+      } else {
+        navigate('/seeker/complete', { replace: true })
+      }
+      return
+    }
+    // Fallback: unknown type -> stay on home
+    navigate('/', { replace: true })
+  }
+
+  // Your modals & global UI can remain outside <Routes> so they work anywhere.
+  return (
+    <>
+      {/* keep: login/signup modals, toasts, etc. */}
+
+      <Routes>
+        {/* HOME (landing / marketing / mixed UI) */}
+        <Route path="/" element={
+          // If you have a dedicated Home component, render it here.
+          // Otherwise, keep your current landing JSX inline.
+          <div>{/* your existing landing / mixed content */}</div>
+        }/>
+
+        {/* COMPANY */}
+        <Route path="/company/profile" element={
+          <ProtectedRoute>
+            <CompanyProfileView />
+          </ProtectedRoute>
+        } />
+        <Route path="/company/complete" element={
+          <ProtectedRoute>
+            <CompanyProfileCompletion />
+          </ProtectedRoute>
+        } />
+
+        {/* SEEKER */}
+        <Route path="/seeker/profile" element={
+          <ProtectedRoute>
+            <UserProfileView />
+          </ProtectedRoute>
+        } />
+        <Route path="/seeker/complete" element={
+          <ProtectedRoute>
+            <JobSeekerProfileCompletion />
+          </ProtectedRoute>
+        } />
+
+        {/* 404 */}
+        <Route path="*" element={<div className="p-6">Not Found</div>} />
+      </Routes>
+    </>
+  )
+}
   useEffect(() => {
     if (user && currentPage === 'search-jobs') {
       fetchJobs()
