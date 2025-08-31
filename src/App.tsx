@@ -563,7 +563,7 @@ function LandingView(props: {
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-8">
-            {user && (
+            {user && user.user_metadata?.user_type === 'job_seeker' && (
               <a
                 href="#search-jobs"
                 onClick={onSearchJobsClick}
@@ -623,7 +623,7 @@ function LandingView(props: {
 
         {/* Mobile Navigation */}
         <div className="md:hidden px-4 sm:px-6 pb-4">
-          {user ? (
+          {user && user.user_metadata?.user_type === 'job_seeker' ? (
             <div className="flex items-center justify-center">
               <a
                 href="#search-jobs"
@@ -634,7 +634,7 @@ function LandingView(props: {
                 <span>Search Jobs</span>
               </a>
             </div>
-          ) : (
+          ) : !user ? (
             <div className="md:hidden px-4 sm:px-6 pb-4">
               <div className="flex items-center justify-center space-x-6">
                 <a href="#about" className="text-gray-300 hover:text-white transition-colors duration-200 text-sm font-medium scroll-smooth">
@@ -648,7 +648,7 @@ function LandingView(props: {
                 </a>
               </div>
             </div>
-          )}
+          ) : null}
         </div>
       </header>
 
