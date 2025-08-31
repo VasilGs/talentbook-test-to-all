@@ -830,7 +830,7 @@ function LandingView(props: {
                   <div className="text-gray-400">Active Jobs</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-3xl sm:text-4xl font-bold text-white mb-2">100K+</</div>
+                  <div className="text-3xl sm:text-4xl font-bold text-white mb-2">100K+</div>
                   <div className="text-gray-400">Professionals</div>
                 </div>
                 <div className="text-center">
