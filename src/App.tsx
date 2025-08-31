@@ -72,7 +72,7 @@ export default function App() {
   const [showCursor, setShowCursor] = useState(true);
   const [isSignupModalOpen, setIsSignupModalOpen] = useState(false);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<import('@supabase/supabase-js').User | null>(null);
   const [tempSignupData, setTempSignupData] = useState<SignupData | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState<'home' | 'search-jobs' | 'complete-profile' | 'user-profile'>('home');
