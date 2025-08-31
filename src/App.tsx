@@ -302,7 +302,7 @@ export default function App() {
       sub.subscription.unsubscribe()
     }
   }, [])
-  sync function routeByRole(userId: string) {
+  async function routeByRole(userId: string) {
     const type = await getUserType(userId)
     if (type === 'company') {
       // Optional: enforce completion first
