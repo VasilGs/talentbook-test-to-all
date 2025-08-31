@@ -152,11 +152,6 @@ export default function App() {
         if (u) {
           // check profile presence
           await checkUserProfileCompletion(u);
-          // route by role once
-          if (!routed.current) {
-            routed.current = true;
-            await routeByRole(u.id);
-          }
         } else {
           // clear temp data when logged out
           setTempSignupData(null);
@@ -180,10 +175,6 @@ export default function App() {
             setTempSignupData(null);
             setIsSignupModalOpen(false);
             setIsLoginModalOpen(false);
-            if (!routed.current) {
-              routed.current = true;
-              await routeByRole(u.id);
-            }
           } else if (event === 'SIGNED_OUT') {
             setUserProfileComplete(false);
             setCurrentPage('home');
