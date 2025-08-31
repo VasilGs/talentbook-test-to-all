@@ -28,11 +28,11 @@ export async function getUserType(userId?: string): Promise<UserType | null> {
 export async function isCompanyProfileComplete(userId: string): Promise<boolean> {
   const { data, error } = await supabase
     .from('companies')
-    .select('name,uic,contact_email')
+    .select('company_name,uic_company_id,contact_email')
     .eq('user_id', userId)
     .maybeSingle()
   if (error) return false
-  return !!(data?.name && data?.uic && data?.contact_email)
+  return !!(data?.company_name && data?.uic_company_id && data?.contact_email)
 }
 
 export async function isSeekerProfileComplete(userId: string): Promise<boolean> {
