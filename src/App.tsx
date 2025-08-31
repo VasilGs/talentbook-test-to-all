@@ -13,6 +13,9 @@ import { CompanyProfileCompletion } from './components/CompanyProfileCompletion'
 import { CompanyProfileView } from './components/CompanyProfileView';
 import { PrivacyTermsModal } from './components/PrivacyTermsModal';
 import { supabase, type User } from './lib/supabase';
+import { Routes, Route, useNavigate } from 'react-router-dom';
+import ProtectedRoute from '@/routes/Protected'
+
 
 interface SignupData {
   name: string
