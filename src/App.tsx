@@ -15,6 +15,7 @@ import { PrivacyTermsModal } from './components/PrivacyTermsModal';
 import { supabase, type User } from './lib/supabase';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import ProtectedRoute from '@/routes/Protected'
+import { getUserType, isCompanyProfileComplete, isSeekerProfileComplete } from '@/lib/role'
 
 
 interface SignupData {
