@@ -76,7 +76,7 @@ export default function App() {
   const [tempSignupData, setTempSignupData] = useState<SignupData | null>(null);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
-    const routed = useRef(false)
+    const routed = useRef(false);
   const [currentPage, setCurrentPage] = useState<'home' | 'search-jobs' | 'complete-profile' | 'user-profile'>('home');
   const [userProfileComplete, setUserProfileComplete] = useState(false);
   const [companyData, setCompanyData] = useState<CompanyData | null>(null);
