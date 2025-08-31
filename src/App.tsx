@@ -1,20 +1,47 @@
-import React, { useState, useEffect } from 'react'
-import { motion, AnimatePresence } from 'motion/react'
-import { Heart, X, ArrowLeft, ArrowRight, Sparkles, Users, Briefcase, Star, Crown, Zap } from 'lucide-react'
-import { JobCard } from './components/JobCard'
-import { JobDetailsModal } from './components/JobDetailsModal'
-import { LoginModal } from './components/login-modal'
-import { SignupModal } from './components/signup-modal'
-import { JobSeekerProfileCompletion } from './components/JobSeekerProfileCompletion'
-import { CompanyProfileCompletion } from './components/CompanyProfileCompletion'
-import { UserProfileView } from './components/UserProfileView'
-import { CompanyProfileView } from './components/CompanyProfileView'
-import { PrivacyTermsModal } from './components/PrivacyTermsModal'
-import { JobCandidateAnimation } from './components/job-candidate-animation'
-import { Pricing } from './components/ui/pricing'
-import { AddOnsModal } from './components/AddOnsModal'
-import { supabase, type User } from './lib/supabase'
+import React, { useState, useEffect } from 'react';
+import { Search, Users, Briefcase, Star, Loader2, X, Check } from 'lucide-react';
+import { AnimatePresence } from 'motion/react';
+import { JobCandidateAnimation } from './components/job-candidate-animation';
+import { Pricing } from './components/ui/pricing';
+import { SignupModal } from './components/signup-modal';
+import { LoginModal } from './components/login-modal';
+import { UserProfileView } from './components/UserProfileView';
+import { JobCard } from './components/JobCard';
+import { JobDetailsModal } from './components/JobDetailsModal';
+import { JobSeekerProfileCompletion } from './components/JobSeekerProfileCompletion';
+import { CompanyProfileCompletion } from './components/CompanyProfileCompletion';
+import { CompanyProfileView } from './components/CompanyProfileView';
+import { PrivacyTermsModal } from './components/PrivacyTermsModal';
+import { supabase, type User } from './lib/supabase';
 
+interface SignupData {
+  name: string
+  email: string
+  password: string
+  userType: 'job_seeker' | 'company'
+}
+
+// Company interface matching Supabase table structure
+interface CompanyData {
+  id: string
+  company_name: string
+  company_logo: string | null
+  industry: string | null
+  website_link: string | null
+  short_introduction: string | null
+  mol_name: string | null
+  uic_company_id: string | null
+  address: string | null
+  phone_number: string | null
+  contact_email: string | null
+  responsible_person_name: string | null
+  number_of_employees: number | null
+  subscription_package: string | null
+  created_at: string
+  updated_at: string
+}
+
+// Job interface matching Supabase table structure
 interface Job {
   id: string;
   company_name: string;
@@ -33,126 +60,197 @@ interface Job {
   created_at: string;
 }
 
-interface SignupData {
-  name: string
-  email: string
-  password: string
-  userType: 'job_seeker' | 'company'
-}
+export default function App() {
+  const [placeholderText, setPlaceholderText] = useState('');
+  const [currentTextIndex, setCurrentTextIndex] = useState(0);
+  const [charIndex, setCharIndex] = useState(0);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showCursor, setShowCursor] = useState(true);
+  const [isSignupModalOpen, setIsSignupModalOpen] = useState(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [tempSignupData, setTempSignupData] = useState<SignupData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState<'home' | 'search-jobs' | 'complete-profile' | 'user-profile'>('home');
+  const [userProfileComplete, setUserProfileComplete] = useState(false);
+  const [companyData, setCompanyData] = useState<CompanyData | null>(null);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(false);
+  const [currentJobIndex, setCurrentJobIndex] = useState(0);
+  const [exitDirection, setExitDirection] = useState<'left' | 'right' | null>(null);
+  const [isJobDetailsModalOpen, setIsJobDetailsModalOpen] = useState(false);
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
+  const [isPrivacyTermsModalOpen, setIsPrivacyTermsModalOpen] = useState(false);
 
-interface CompanyData {
-  id: string
-  company_name: string
-  company_logo: string | null
-  industry: string | null
-  website_link: string | null
-  short_introduction: string | null
-  mol_name: string | null
-  uic_company_id: string | null
-  address: string | null
-  phone_number: string | null
-  contact_email: string | null
-  responsible_person_name: string | null
-  number_of_employees: number | null
-  subscription_package: string | null
-  created_at: string
-  updated_at: string
-  user_id: string | null
-}
+  const texts = [
+    "What job are you looking for?",
+    "Who are you looking to hire?"
+  ];
 
-function App() {
-  const [jobs, setJobs] = useState<Job[]>([])
-  const [currentJobIndex, setCurrentJobIndex] = useState(0)
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null)
-  const [showJobDetails, setShowJobDetails] = useState(false)
-  const [showLoginModal, setShowLoginModal] = useState(false)
-  const [showSignupModal, setShowSignupModal] = useState(false)
-  const [showPrivacyTermsModal, setShowPrivacyTermsModal] = useState(false)
-  const [showAddOnsModal, setShowAddOnsModal] = useState(false)
-  const [user, setUser] = useState<User | null>(null)
-  const [userType, setUserType] = useState<'job_seeker' | 'company' | null>(null)
-  const [companyData, setCompanyData] = useState<CompanyData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [signupData, setSignupData] = useState<SignupData | null>(null)
-  const [showProfileCompletion, setShowProfileCompletion] = useState(false)
-  const [exitDirection, setExitDirection] = useState<'left' | 'right' | null>(null)
-
-  // Check for existing session on app load
   useEffect(() => {
-    checkSession()
-    
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
-        await handleUserSignIn(session.user)
-      } else if (event === 'SIGNED_OUT') {
-        handleSignOut()
+    const currentText = texts[currentTextIndex];
+    const typingSpeed = isDeleting ? 50 : 100;
+
+    const timer = setTimeout(() => {
+      if (!isDeleting) {
+        if (charIndex < currentText.length) {
+          setPlaceholderText(currentText.substring(0, charIndex + 1));
+          setCharIndex(charIndex + 1);
+        } else {
+          setTimeout(() => setIsDeleting(true), 2000);
+        }
+      } else {
+        if (charIndex > 0) {
+          setPlaceholderText(currentText.substring(0, charIndex - 1));
+          setCharIndex(charIndex - 1);
+        } else {
+          setIsDeleting(false);
+          setCurrentTextIndex((currentTextIndex + 1) % texts.length);
+        }
       }
+    }, typingSpeed);
+
+    return () => clearTimeout(timer);
+  }, [charIndex, isDeleting, currentTextIndex, texts]);
+
+  useEffect(() => {
+    const cursorTimer = setInterval(() => {
+      setShowCursor(prev => !prev);
+    }, 500);
+
+    return () => clearInterval(cursorTimer);
+  }, []);
+
+  // Handle authentication state changes
+  useEffect(() => {
+    const startTime = Date.now()
+    const minLoadingTime = 2500 // 2.5 seconds minimum loading time
+    
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const elapsedTime = Date.now() - startTime
+      const remainingTime = Math.max(0, minLoadingTime - elapsedTime)
+      
+      setTimeout(() => {
+        setUser(session?.user ?? null)
+        if (session?.user) {
+          checkUserProfileCompletion(session.user)
+        } else {
+          // Clear temp signup data when user logs out
+          setTempSignupData(null)
+        }
+        setLoading(false)
+      }, remainingTime)
     })
 
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // Show loading screen for auth state changes (login/logout)
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+        setLoading(true)
+        const authChangeStartTime = Date.now()
+        
+        setTimeout(() => {
+          setUser(session?.user ?? null)
+          if (event === 'SIGNED_IN' && session?.user) {
+            checkUserProfileCompletion(session.user)
+            // Clear temp signup data when user successfully logs in
+            setTempSignupData(null)
+          } else if (event === 'SIGNED_OUT') {
+            setUserProfileComplete(false)
+            setCurrentPage('home')
+            setTempSignupData(null)
+            setCompanyData(null)
+          }
+          setLoading(false)
+          
+          // Close modals when user logs in
+          if (session?.user) {
+            setIsSignupModalOpen(false)
+            setIsLoginModalOpen(false)
+          }
+        }, minLoadingTime)
+      } else {
+        // For other events, update immediately
+        setUser(session?.user ?? null)
+        if (session?.user) {
+          checkUserProfileCompletion(session.user)
+        }
+      }
+    })
+      
     return () => subscription.unsubscribe()
   }, [])
 
-  const checkSession = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user) {
-        await handleUserSignIn(session.user)
-      } else {
-        setLoading(false)
+  // Check if user profile is complete
+  const checkUserProfileCompletion = async (user: User) => {
+    const userType = user.user_metadata?.user_type
+    
+    if (userType === 'job_seeker') {
+      try {
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .maybeSingle()
+
+        // Check if profile exists (regardless of completeness)
+        if (error || !profile) {
+          setUserProfileComplete(false)
+          return
+        }
+
+        // Profile exists, mark as complete
+        setUserProfileComplete(true)
+      } catch (error) {
+        console.error('Error checking profile completion:', error)
+        setUserProfileComplete(false)
       }
-    } catch (error) {
-      console.error('Error checking session:', error)
-      setLoading(false)
-    }
-  }
-
-  const handleUserSignIn = async (user: User) => {
-    setUser(user)
-    const userTypeFromMetadata = user.user_metadata?.user_type as 'job_seeker' | 'company' | undefined
-    setUserType(userTypeFromMetadata || 'job_seeker')
-
-    // If user is a company, fetch company data
-    if (userTypeFromMetadata === 'company') {
+    } else if (userType === 'company') {
       try {
         const { data: company, error } = await supabase
           .from('companies')
           .select('*')
           .eq('user_id', user.id)
-          .single()
+          .maybeSingle()
 
-        if (error) {
-          console.error('Error fetching company data:', error)
+        // Check if company profile exists (regardless of completeness)
+        if (error || !company) {
+          setUserProfileComplete(false)
+          setCompanyData(null)
         } else {
+          setUserProfileComplete(true)
           setCompanyData(company)
         }
       } catch (error) {
-        console.error('Error fetching company data:', error)
+        console.error('Error checking company profile completion:', error)
+        setUserProfileComplete(false)
+        setCompanyData(null)
       }
     }
-
-    setLoading(false)
   }
 
-  const handleSignOut = async () => {
-    try {
-      await supabase.auth.signOut()
-    } catch (error) {
-      console.error('Error signing out:', error)
-    } finally {
-      setUser(null)
-      setUserType(null)
-      setCompanyData(null)
-      setLoading(false)
-    }
+  const handleProfileComplete = () => {
+    setUserProfileComplete(true)
+    setTempSignupData(null)
   }
 
-  // Fetch jobs when component mounts
-  useEffect(() => {
-    fetchJobs()
-  }, [])
+  const handleCompanyProfileUpdate = () => {
+    // Re-fetch company data after update
+    if (user) checkUserProfileCompletion(user)
+  }
 
+  const handleContinueSignup = (signupData: SignupData) => {
+    setTempSignupData(signupData)
+    setIsSignupModalOpen(false)
+    setCurrentPage('complete-profile')
+  }
+
+  // Fetch jobs from Supabase
   const fetchJobs = async () => {
+    setJobsLoading(true)
     try {
       const { data, error } = await supabase
         .from('job_posts')
@@ -167,566 +265,860 @@ function App() {
       }
     } catch (error) {
       console.error('Error fetching jobs:', error)
+    } finally {
+      setJobsLoading(false)
     }
   }
+
+  // Fetch jobs when user logs in and navigates to search page
+  useEffect(() => {
+    if (user && currentPage === 'search-jobs') {
+      fetchJobs()
+    }
+  }, [user, currentPage])
+
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut()
+    } catch (error) {
+      // Handle logout errors gracefully - the local session will still be cleared
+      console.warn('Logout error (local session cleared):', error)
+    }
+  }
+
+  const handleSearchJobsClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setCurrentJobIndex(0); // Reset to first job when navigating to search
+    setCurrentPage('search-jobs');
+  };
+
+  const handleLogoClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setCurrentPage('home');
+  };
+
+  const handleUserNameClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setCurrentPage('user-profile');
+  };
 
   const handleSwipe = (direction: 'left' | 'right') => {
-    setExitDirection(direction)
+    console.log(`Swiped ${direction} on job:`, jobs[currentJobIndex]);
     
-    setTimeout(() => {
-      if (currentJobIndex < jobs.length - 1) {
-        setCurrentJobIndex(currentJobIndex + 1)
-      } else {
-        setCurrentJobIndex(0) // Loop back to first job
-      }
-      setExitDirection(null)
-    }, 400)
-  }
-
-  const handleCardClick = (job: Job) => {
-    setSelectedJob(job)
-    setShowJobDetails(true)
-  }
-
-  const handleContinueSignup = (data: SignupData) => {
-    setSignupData(data)
-    setShowProfileCompletion(true)
-  }
-
-  const handleProfileComplete = () => {
-    setShowProfileCompletion(false)
-    setSignupData(null)
-    // The auth state change will handle the rest
-  }
-
-  const handleCompanyUpdateSuccess = () => {
-    // Refresh company data
-    if (user && userType === 'company') {
-      handleUserSignIn(user)
+    // Move to next job
+    if (currentJobIndex < jobs.length - 1) {
+      setCurrentJobIndex(currentJobIndex + 1);
+    } else {
+      // Reset to first job when all jobs are swiped
+      setCurrentJobIndex(0);
     }
-  }
+    
+    // Reset exit direction after swipe
+    setTimeout(() => {
+      setExitDirection(null);
+    }, 100);
+  };
 
-  // Loading state
+  const handleActionButton = (action: 'reject' | 'approve') => {
+    setExitDirection(action === 'reject' ? 'left' : 'right');
+    
+    // Add haptic feedback if available
+    if (navigator.vibrate) {
+      navigator.vibrate(50); // Light haptic feedback
+    }
+    
+    // Trigger the swipe with a slight delay to ensure exitDirection is set
+    setTimeout(() => {
+      handleSwipe(action === 'reject' ? 'left' : 'right');
+    }, 10);
+  };
+
+  const handleJobCardClick = (job: Job) => {
+    setSelectedJob(job);
+    setIsJobDetailsModalOpen(true);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 overflow-hidden">
+          {/* Logo */}
+          <div className="mb-8">
             <img 
-              src="/talent book singular icon.png" 
-              alt="TalentBook Icon" 
-              className="w-full h-full object-contain animate-pulse"
+              src="/talent_book_logo_draft_3 copy copy.png" 
+              alt="TalentBook Logo" 
+              className="h-16 w-auto mx-auto object-contain"
             />
           </div>
-          <p className="text-white text-lg">Loading TalentBook...</p>
+          
+          {/* Loading Spinner */}
+          <div className="flex items-center justify-center space-x-3 mb-4">
+            <Loader2 className="w-6 h-6 text-[#FFC107] animate-spin" />
+            <span className="text-white text-lg font-medium">Loading TalentBook...</span>
+          </div>
+          
+          {/* Loading Bar */}
+          <div className="w-64 h-1 bg-white/20 rounded-full overflow-hidden mx-auto">
+            <div className="h-full bg-gradient-to-r from-red-600 to-[#FFC107] rounded-full animate-pulse"></div>
+          </div>
+        </div>
+        
+        {/* Background Elements */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-red-600/5 rounded-full blur-3xl animate-pulse-slow"></div>
+          <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-[#FFC107]/5 rounded-full blur-3xl animate-pulse-slow"></div>
         </div>
       </div>
     )
   }
 
-  // Show profile completion if user is signing up
-  if (showProfileCompletion && signupData) {
-    if (signupData.userType === 'job_seeker') {
-      return (
-        <JobSeekerProfileCompletion
-          signupData={signupData}
-          onProfileComplete={handleProfileComplete}
-        />
-      )
-    } else {
-      return (
-        <CompanyProfileCompletion
-          signupData={signupData}
-          onProfileComplete={handleProfileComplete}
-        />
-      )
-    }
-  }
-
-  // Show company profile view if user is logged in as company
-  if (user && userType === 'company' && companyData) {
-    return (
-      <CompanyProfileView
-        company={companyData}
-        onUpdateSuccess={handleCompanyUpdateSuccess}
-        onSignOut={handleSignOut}
-      />
-    )
-  }
-
-  // Show user profile view if user is logged in as job seeker
-  if (user && userType === 'job_seeker') {
-    return (
-      <UserProfileView onSignOut={handleSignOut} />
-    )
-  }
-
-  // Default landing page for non-authenticated users
-  const currentJob = jobs[currentJobIndex]
-
-  const pricingPlans = [
-    {
-      name: "Free",
-      price: "0",
-      yearlyPrice: "0",
-      period: "month",
-      features: [
-        "Create basic profile",
-        "Browse job listings",
-        "Apply to unlimited jobs",
-        "Save up to 10 jobs",
-        "Basic search filters"
-      ],
-      description: "Perfect for getting started",
-      buttonText: "Get Started Free",
-      href: "#",
-      isPopular: false,
-      userType: 'job_seeker' as const
-    },
-    {
-      name: "Premium",
-      price: "29",
-      yearlyPrice: "290",
-      period: "month",
-      features: [
-        "Everything in Free",
-        "Advanced profile features",
-        "Priority in search results",
-        "Unlimited saved jobs",
-        "Advanced search filters",
-        "Profile analytics",
-        "Direct messaging with employers"
-      ],
-      description: "Best for active job seekers",
-      buttonText: "Upgrade to Premium",
-      href: "#",
-      isPopular: true,
-      userType: 'job_seeker' as const
-    },
-    {
-      name: "Pro",
-      price: "49",
-      yearlyPrice: "490",
-      period: "month",
-      features: [
-        "Everything in Premium",
-        "Featured profile placement",
-        "Career coaching session",
-        "Resume optimization",
-        "Interview preparation",
-        "Salary negotiation tips",
-        "Priority customer support"
-      ],
-      description: "For serious career advancement",
-      buttonText: "Go Pro",
-      href: "#",
-      isPopular: false,
-      userType: 'job_seeker' as const
-    },
-    {
-      name: "Starter",
-      price: "99",
-      yearlyPrice: "990",
-      period: "month",
-      features: [
-        "Post up to 5 jobs",
-        "Basic company profile",
-        "Standard applicant filtering",
-        "Email notifications",
-        "Basic analytics"
-      ],
-      description: "Perfect for small businesses",
-      buttonText: "Start Hiring",
-      href: "#",
-      isPopular: false,
-      userType: 'employer' as const
-    },
-    {
-      name: "Professional",
-      price: "299",
-      yearlyPrice: "2990",
-      period: "month",
-      features: [
-        "Post unlimited jobs",
-        "Enhanced company profile",
-        "Advanced candidate search",
-        "Priority job placement",
-        "Detailed analytics dashboard",
-        "Bulk messaging tools",
-        "Dedicated account manager"
-      ],
-      description: "Best for growing companies",
-      buttonText: "Go Professional",
-      href: "#",
-      isPopular: true,
-      userType: 'employer' as const
-    },
-    {
-      name: "Enterprise",
-      price: "599",
-      yearlyPrice: "5990",
-      period: "month",
-      features: [
-        "Everything in Professional",
-        "Custom branding options",
-        "API access",
-        "Advanced integrations",
-        "Custom reporting",
-        "Priority support",
-        "Training sessions",
-        "Custom contract terms"
-      ],
-      description: "For large organizations",
-      buttonText: "Contact Sales",
-      href: "#",
-      isPopular: false,
-      userType: 'employer' as const
-    }
-  ]
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900">
-      {/* Navigation */}
-      <nav className="relative z-10 p-6">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
+      {/* Navigation Header */}
+      <header className="relative z-10">
+        <nav className="flex items-center justify-between px-4 sm:px-6 lg:px-8 py-6">
           {/* Logo */}
-          <div className="flex items-center space-x-3">
-            <div className="w-12 h-12 rounded-xl overflow-hidden">
-              <img 
-                src="/talent book singular icon.png" 
-                alt="TalentBook Icon" 
-                className="w-full h-full object-contain"
-              />
+          <div className="flex items-center">
+            <div className="flex items-center space-x-3">
+              <button onClick={handleLogoClick} className="focus:outline-none">
+                <img 
+                  src="/talent_book_logo_draft_3 copy copy.png" 
+                  alt="TalentBook Logo" 
+                  className="h-12 w-auto object-contain hover:opacity-80 transition-opacity duration-200"
+                />
+              </button>
             </div>
-            <div className="flex items-center space-x-2">
-              <span className="text-2xl font-bold text-white font-poppins">TalentBook</span>
-              <div className="bg-gradient-to-r from-red-600 to-red-700 text-white px-2 py-1 rounded-md text-xs font-bold">
-                BETA
-              </div>
-            </div>
+          </div>
+
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center space-x-8">
+            {user && (
+              <a 
+                href="#search-jobs"
+                onClick={handleSearchJobsClick}
+                className="text-gray-300 hover:text-white transition-colors duration-200 font-medium flex items-center space-x-2 hover:bg-white/10 px-4 py-2 rounded-lg"
+              >
+                <Search className="w-4 h-4" />
+                <span>Search Jobs</span>
+              </a>
+            )}
+            {!user && (
+              <>
+                <a href="#about" className="text-gray-300 hover:text-white transition-colors duration-200 font-medium scroll-smooth">
+                  About us
+                </a>
+                <a href="#pricing" className="text-gray-300 hover:text-white transition-colors duration-200 font-medium scroll-smooth">
+                  Pricing
+                </a>
+                <a href="#contact" className="text-gray-300 hover:text-white transition-colors duration-200 font-medium scroll-smooth">
+                  Contact us
+                </a>
+              </>
+            )}
           </div>
 
           {/* Auth Buttons */}
           <div className="flex items-center space-x-4">
-            <button
-              onClick={() => setShowLoginModal(true)}
-              className="text-white hover:text-[#FFC107] transition-colors duration-200 font-medium"
-            >
-              Log In
-            </button>
-            <button
-              onClick={() => setShowSignupModal(true)}
-              className="bg-[#FFC107] hover:bg-[#FFB300] text-black px-6 py-2 rounded-lg font-semibold transition-all duration-200 hover:shadow-lg hover:shadow-[#FFC107]/25"
-            >
-              Sign Up Free
-            </button>
+            {user ? (
+              <div className="flex items-center space-x-4">
+                <button 
+                  onClick={handleUserNameClick}
+                  className="text-gray-300 hover:text-white transition-colors duration-200 cursor-pointer"
+                >
+                  Welcome, {user.user_metadata?.full_name || user.email}!
+                </button>
+                <button 
+                  onClick={handleSignOut}
+                  className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white px-4 py-2 rounded-lg font-medium transition-all duration-200 hover:shadow-lg hover:shadow-red-600/25 hover:-translate-y-0.5"
+                >
+                  Sign Out
+                </button>
+              </div>
+            ) : (
+              <>
+                <button 
+                  onClick={() => setIsLoginModalOpen(true)}
+                  className="text-gray-300 hover:text-white transition-colors duration-200 font-medium"
+                >
+                  Log In
+                </button>
+                <button 
+                  onClick={() => setIsSignupModalOpen(true)}
+                  className="bg-[#FFC107] hover:bg-[#FFB300] text-black px-6 py-2.5 rounded-lg font-medium transition-all duration-200 hover:shadow-lg hover:shadow-[#FFC107]/25"
+                >
+                  Sign Up For Free
+                </button>
+              </>
+            )}
+          </div>
+        </nav>
+
+        {/* Mobile Navigation */}
+        <div className="md:hidden px-4 sm:px-6 pb-4">
+          {user ? (
+            <div className="flex items-center justify-center">
+              <a 
+                href="#search-jobs"
+                onClick={handleSearchJobsClick}
+                className="text-gray-300 hover:text-white transition-colors duration-200 font-medium flex items-center space-x-2 hover:bg-white/10 px-4 py-2 rounded-lg"
+              >
+                <Search className="w-4 h-4" />
+                <span>Search Jobs</span>
+              </a>
+            </div>
+          ) : (
+          <div className="md:hidden px-4 sm:px-6 pb-4">
+            <div className="flex items-center justify-center space-x-6">
+              <a href="#about" className="text-gray-300 hover:text-white transition-colors duration-200 text-sm font-medium scroll-smooth">
+                About us
+              </a>
+              <a href="#pricing" className="text-gray-300 hover:text-white transition-colors duration-200 text-sm font-medium scroll-smooth">
+                Pricing
+              </a>
+              <a href="#contact" className="text-gray-300 hover:text-white transition-colors duration-200 text-sm font-medium scroll-smooth">
+                Contact us
+              </a>
+            </div>
+          </div>
+          )}
+        </div>
+      </header>
+
+      {/* User Profile View - When logged in */}
+      {user && userProfileComplete && currentPage === 'user-profile' && (
+        <>
+          {user.user_metadata?.user_type === 'job_seeker' && <UserProfileView onSignOut={handleSignOut} />}
+          {user.user_metadata?.user_type === 'company' && companyData && (
+            <CompanyProfileView 
+              company={companyData} 
+              onUpdateSuccess={handleCompanyProfileUpdate} 
+              onSignOut={handleSignOut}
+            />
+          )}
+        </>
+      )}
+
+      {/* Job Seeker Profile Completion - When logged in as job seeker with incomplete profile */}
+      {tempSignupData && tempSignupData.userType === 'job_seeker' && (
+        <JobSeekerProfileCompletion 
+          signupData={tempSignupData}
+          onProfileComplete={handleProfileComplete}
+        />
+      )}
+
+      {/* Company Profile Completion - When signed up as company */}
+      {tempSignupData && tempSignupData.userType === 'company' && (
+        <CompanyProfileCompletion 
+          signupData={tempSignupData}
+          onProfileComplete={handleProfileComplete}
+        />
+      )}
+
+      {/* Job Search Page - When logged in and on search page */}
+      {user && userProfileComplete && currentPage === 'search-jobs' && (
+        <div className="min-h-screen bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900 py-8 px-4">
+          <div className="max-w-md mx-auto">
+            {/* Search Bar */}
+            <div className="mb-8">
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Search for job"
+                  className="w-full px-6 py-4 bg-white/10 backdrop-blur-sm border border-white/20 rounded-2xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all duration-200 pr-14"
+                />
+                <button className="absolute right-4 top-1/2 transform -translate-y-1/2 text-red-500 hover:text-red-400 transition-colors duration-200">
+                  <Search className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            {/* Job Cards */}
+            <div className="relative h-[500px] mb-1">
+              <AnimatePresence mode="wait">
+                {jobsLoading ? (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="text-center">
+                      <Loader2 className="w-8 h-8 text-[#FFC107] animate-spin mx-auto mb-4" />
+                      <p className="text-white">Loading jobs...</p>
+                    </div>
+                  </div>
+                ) : jobs.length === 0 ? (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="text-center">
+                      <h3 className="text-2xl font-bold text-white mb-4">
+                        No jobs available
+                      </h3>
+                      <p className="text-gray-300 mb-6">
+                        Check back later for new opportunities.
+                      </p>
+                      <button
+                        onClick={fetchJobs}
+                        className="bg-[#FFC107] hover:bg-[#FFB300] text-black px-6 py-3 rounded-lg font-semibold transition-all duration-200"
+                      >
+                        Refresh
+                      </button>
+                    </div>
+                  </div>
+                ) : currentJobIndex < jobs.length ? (
+                  <JobCard
+                    key={jobs[currentJobIndex].id}
+                    job={{
+                      id: jobs[currentJobIndex].id,
+                      company: jobs[currentJobIndex].company_name,
+                      position: jobs[currentJobIndex].position,
+                      location: jobs[currentJobIndex].location,
+                      salary: jobs[currentJobIndex].salary || 'Salary not specified',
+                      logo: jobs[currentJobIndex].company_logo || ''
+                    }}
+                    onSwipe={handleSwipe}
+                    onCardClick={() => handleJobCardClick(jobs[currentJobIndex])}
+                    exitDirection={exitDirection}
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="text-center">
+                      <h3 className="text-2xl font-bold text-white mb-4">
+                        No more jobs!
+                      </h3>
+                      <p className="text-gray-300 mb-6">
+                        You've seen all available positions.
+                      </p>
+                      <button
+                        onClick={() => setCurrentJobIndex(0)}
+                        className="bg-[#FFC107] hover:bg-[#FFB300] text-black px-6 py-3 rounded-lg font-semibold transition-all duration-200"
+                      >
+                        Start Over
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Action Buttons */}
+            {!jobsLoading && jobs.length > 0 && currentJobIndex < jobs.length && (
+              <div className="flex justify-center space-x-12 mt-2">
+                {/* Reject Button */}
+                <button
+                  onClick={() => handleActionButton('reject')}
+                  className="w-16 h-16 bg-gradient-to-br from-red-500/20 to-red-600/20 backdrop-blur-sm border-2 border-red-500/40 rounded-full flex items-center justify-center hover:bg-gradient-to-br hover:from-red-500/40 hover:to-red-600/40 hover:border-red-500/70 hover:scale-110 transition-all duration-300 group shadow-lg shadow-red-500/20"
+                >
+                  <X className="w-8 h-8 text-red-400 group-hover:text-red-300 transition-colors duration-200" />
+                </button>
+
+                {/* Approve Button */}
+                <button
+                  onClick={() => handleActionButton('approve')}
+                  className="w-16 h-16 bg-gradient-to-br from-green-500/20 to-green-600/20 backdrop-blur-sm border-2 border-green-500/40 rounded-full flex items-center justify-center hover:bg-gradient-to-br hover:from-green-500/40 hover:to-green-600/40 hover:border-green-500/70 hover:scale-110 active:scale-95 transition-all duration-300 group shadow-lg shadow-green-500/20 focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-opacity-50"
+                  aria-label="Approve job"
+                  disabled={currentJobIndex >= jobs.length}
+                >
+                  <Check className="w-8 h-8 text-white/60 group-hover:text-green-400 transition-colors duration-200" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
-      </nav>
-
+      )}
       {/* Hero Section */}
-      <div className="relative overflow-hidden">
-        <div className="max-w-7xl mx-auto px-6 py-16 lg:py-24">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-            {/* Left Column - Content */}
-            <div className="space-y-8">
-              <div className="space-y-6">
-                <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold text-white leading-tight font-poppins">
-                  <JobCandidateAnimation />
-                </h1>
-                <p className="text-xl text-gray-300 leading-relaxed max-w-2xl">
-                  The revolutionary platform that connects talent with opportunity through intelligent matching. 
-                  Swipe your way to your dream job or perfect candidate.
-                </p>
+      {!user && !tempSignupData && currentPage === 'home' && (
+        <main className="relative z-10 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-6xl mx-auto text-center">
+            {/* Hero Content */}
+            <div className="pt-6 sm:pt-12 lg:pt-16 pb-20">
+              {/* Badge */}
+              <div className="inline-flex items-center bg-gradient-to-r from-red-600/20 to-amber-500/20 rounded-full px-4 py-2 mb-8 border border-red-600/30">
+                <Star className="w-4 h-4 text-amber-400 mr-2" />
+                <span className="text-[#FFC107] text-sm font-medium">Trusted by 10,000+ professionals</span>
               </div>
 
-              {/* CTA Buttons */}
-              <div className="flex flex-col sm:flex-row gap-4">
-                <button
-                  onClick={() => setShowSignupModal(true)}
-                  className="bg-[#FFC107] hover:bg-[#FFB300] text-black px-8 py-4 rounded-lg font-bold text-lg transition-all duration-200 hover:shadow-lg hover:shadow-[#FFC107]/25 hover:-translate-y-1"
-                >
-                  Start Swiping Jobs
-                </button>
-                <button
-                  onClick={() => setShowSignupModal(true)}
-                  className="bg-white/10 hover:bg-white/20 text-white px-8 py-4 rounded-lg font-bold text-lg transition-all duration-200 border-2 border-white/20 hover:border-white/40 backdrop-blur-sm"
-                >
-                  Post a Job
-                </button>
+              {/* Headlines */}
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight font-poppins">
+                <JobCandidateAnimation />
+              </h1>
+
+              <p className="text-lg sm:text-xl text-gray-300 mb-8 max-w-3xl mx-auto leading-relaxed font-light">
+                Swipe and match with your perfect job or candidate.
+              </p>
+
+              {/* Search Section */}
+              <div className="max-w-2xl mx-auto">
+                <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 border-2 border-[#FFC107] shadow-2xl">
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    <div className="flex-1 relative">
+                      <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+                        <Search className="h-5 w-5 text-gray-400" />
+                      </div>
+                      <input
+                        type="text"
+                        className="w-full h-14 pl-12 pr-4 bg-white rounded-xl text-gray-900 placeholder-gray-500 border-0 focus:outline-none focus:ring-2 focus:ring-red-600 transition-all duration-200 text-lg"
+                        placeholder={`${placeholderText}${showCursor ? '|' : ''}`}
+                        readOnly
+                      />
+                    </div>
+                    <button className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white px-8 py-4 rounded-xl font-semibold transition-all duration-200 hover:shadow-lg hover:shadow-red-600/25 flex items-center justify-center space-x-2 text-lg">
+                      <span>Search</span>
+                      <Search className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Feature Pills */}
+                <div className="flex flex-wrap items-center justify-center gap-3 mt-8">
+                  <div className="bg-white/10 backdrop-blur-sm rounded-full px-4 py-2 border border-white/20">
+                    <div className="flex items-center space-x-2">
+                      <Briefcase className="w-4 h-4 text-[#FFC107]" />
+                      <span className="text-white text-sm font-medium">For Job Seekers</span>
+                    </div>
+                  </div>
+                  <div className="bg-white/10 backdrop-blur-sm rounded-full px-4 py-2 border border-white/20">
+                    <div className="flex items-center space-x-2">
+                      <Users className="w-4 h-4 text-red-400" />
+                      <span className="text-white text-sm font-medium">For Employers</span>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Stats */}
-              <div className="grid grid-cols-3 gap-8 pt-8">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-8 mt-20 max-w-4xl mx-auto">
                 <div className="text-center">
-                  <div className="text-3xl font-bold text-[#FFC107] mb-2">10K+</div>
-                  <div className="text-gray-400 text-sm">Active Jobs</div>
-                </div>
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-[#FFC107] mb-2">50K+</div>
-                  <div className="text-gray-400 text-sm">Professionals</div>
+                  <div className="text-3xl sm:text-4xl font-bold text-white mb-2">50K+</div>
+                  <div className="text-gray-400">Active Jobs</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-3xl font-bold text-[#FFC107] mb-2">95%</div>
-                  <div className="text-gray-400 text-sm">Match Rate</div>
+                  <div className="text-3xl sm:text-4xl font-bold text-white mb-2">100K+</div>
+                  <div className="text-gray-400">Professionals</div>
                 </div>
-              </div>
-            </div>
-
-            {/* Right Column - Job Card Demo */}
-            <div className="flex justify-center lg:justify-end">
-              <div className="relative w-full max-w-sm">
-                {/* Background Cards */}
-                <div className="absolute inset-0 transform rotate-3 scale-95 opacity-30">
-                  <div className="w-full h-96 bg-white/5 rounded-3xl border border-white/10"></div>
-                </div>
-                <div className="absolute inset-0 transform -rotate-2 scale-97 opacity-50">
-                  <div className="w-full h-96 bg-white/5 rounded-3xl border border-white/10"></div>
-                </div>
-
-                {/* Main Card */}
-                <div className="relative z-10">
-                  <AnimatePresence mode="wait">
-                    {currentJob && (
-                      <JobCard
-                        key={currentJob.id}
-                        job={{
-                          id: parseInt(currentJob.id),
-                          company: currentJob.company_name,
-                          position: currentJob.position,
-                          location: currentJob.location,
-                          salary: currentJob.salary || 'Competitive',
-                          logo: currentJob.company_logo || ''
-                        }}
-                        onSwipe={handleSwipe}
-                        onCardClick={handleCardClick}
-                        exitDirection={exitDirection}
-                      />
-                    )}
-                  </AnimatePresence>
-                </div>
-
-                {/* Swipe Buttons */}
-                <div className="flex justify-center space-x-8 mt-8">
-                  <button
-                    onClick={() => handleSwipe('left')}
-                    className="w-16 h-16 bg-red-500/20 hover:bg-red-500/30 border-2 border-red-500 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110 group"
-                  >
-                    <X className="w-8 h-8 text-red-400 group-hover:text-red-300" />
-                  </button>
-                  <button
-                    onClick={() => handleSwipe('right')}
-                    className="w-16 h-16 bg-green-500/20 hover:bg-green-500/30 border-2 border-green-500 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-110 group"
-                  >
-                    <Heart className="w-8 h-8 text-green-400 group-hover:text-green-300" />
-                  </button>
+                <div className="text-center">
+                  <div className="text-3xl sm:text-4xl font-bold text-white mb-2">95%</div>
+                  <div className="text-gray-400">Success Rate</div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Floating Elements */}
-        <div className="absolute top-20 left-10 w-20 h-20 bg-[#FFC107]/10 rounded-full blur-xl animate-pulse-slow"></div>
-        <div className="absolute bottom-20 right-10 w-32 h-32 bg-red-600/10 rounded-full blur-xl animate-pulse-slow"></div>
-        <div className="absolute top-1/2 left-1/4 w-16 h-16 bg-blue-600/10 rounded-full blur-xl animate-pulse-slow"></div>
-      </div>
+          {/* Background Elements */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-red-600/10 rounded-full blur-3xl"></div>
+            <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-[#FFC107]/10 rounded-full blur-3xl"></div>
+            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-gradient-to-r from-red-600/5 to-amber-500/5 rounded-full blur-3xl"></div>
+          </div>
+        </main>
+      )}
 
-      {/* Features Section */}
-      <div className="py-16 lg:py-24 bg-white/5 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="text-center mb-16">
-            <h2 className="text-4xl sm:text-5xl font-bold text-white mb-6 font-poppins">
-              Why Choose TalentBook?
-            </h2>
-            <p className="text-xl text-gray-300 max-w-3xl mx-auto">
-              Experience the future of recruitment with our innovative swipe-based matching system
-            </p>
+      {/* About Us Section */}
+      {!user && !tempSignupData && currentPage === 'home' && (
+        <section id="about" className="relative bg-gradient-to-br from-neutral-800 via-neutral-900 to-neutral-800 py-16 lg:py-24">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            {/* Section Header */}
+            <div className="text-center mb-16">
+              <div className="inline-flex items-center bg-gradient-to-r from-red-600/20 to-[#FFC107]/20 rounded-full px-4 py-2 mb-6 border border-red-600/30">
+                <Users className="w-4 h-4 text-[#FFC107] mr-2" />
+                <span className="text-[#FFC107] text-sm font-medium">About TalentBook</span>
+              </div>
+              <h2 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-6 font-poppins">
+                Connecting talent with
+                <span className="block bg-gradient-to-r from-red-600 to-red-700 bg-clip-text text-transparent">
+                  opportunity
+                </span>
+              </h2>
+              <p className="text-xl text-gray-300 max-w-3xl mx-auto leading-relaxed">
+                We're revolutionizing the way people find jobs and companies discover talent. 
+                Our platform makes career connections as simple as a swipe.
+              </p>
+            </div>
+
+            {/* Feature Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16 max-w-4xl mx-auto">
+              {/* For Job Seekers */}
+              <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-8 border border-white/10 hover:bg-white/10 transition-all duration-300 group">
+                <div className="w-12 h-12 bg-gradient-to-br from-red-600 to-red-700 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
+                  <Briefcase className="w-6 h-6 text-white" />
+                </div>
+                <h3 className="text-xl font-semibold text-white mb-4 font-poppins">For Job Seekers</h3>
+                <p className="text-gray-300 leading-relaxed mb-4">
+                  Discover your dream job through our intuitive matching system. Swipe through opportunities 
+                  tailored to your skills and preferences.
+                </p>
+                <ul className="space-y-2 text-sm text-gray-400">
+                  <li className="flex items-center">
+                    <div className="w-1.5 h-1.5 bg-red-600 rounded-full mr-3"></div>
+                    Smart job matching algorithm
+                  </li>
+                  <li className="flex items-center">
+                    <div className="w-1.5 h-1.5 bg-red-600 rounded-full mr-3"></div>
+                    Real-time application tracking
+                  </li>
+                  <li className="flex items-center">
+                    <div className="w-1.5 h-1.5 bg-red-600 rounded-full mr-3"></div>
+                    Direct messaging with employers
+                  </li>
+                </ul>
+              </div>
+
+              {/* For Employers */}
+              <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-8 border border-white/10 hover:bg-white/10 transition-all duration-300 group">
+                <div className="w-12 h-12 bg-gradient-to-br from-[#FFC107] to-[#FFB300] rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
+                  <Users className="w-6 h-6 text-white" />
+                </div>
+                <h3 className="text-xl font-semibold text-white mb-4 font-poppins">For Employers</h3>
+                <p className="text-gray-300 leading-relaxed mb-4">
+                  Find the perfect candidates faster than ever. Our platform connects you with 
+                  pre-qualified talent that matches your requirements.
+                </p>
+                <ul className="space-y-2 text-sm text-gray-400">
+                  <li className="flex items-center">
+                    <div className="w-1.5 h-1.5 bg-[#FFC107] rounded-full mr-3"></div>
+                    AI-powered candidate screening
+                  </li>
+                  <li className="flex items-center">
+                    <div className="w-1.5 h-1.5 bg-[#FFC107] rounded-full mr-3"></div>
+                    Streamlined hiring process
+                  </li>
+                  <li className="flex items-center">
+                    <div className="w-1.5 h-1.5 bg-[#FFC107] rounded-full mr-3"></div>
+                    Advanced analytics dashboard
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Mission Statement */}
+            <div className="text-center">
+              <div className="bg-gradient-to-r from-red-600/10 to-[#FFC107]/10 rounded-3xl p-12 border border-red-600/20">
+                <h3 className="text-2xl sm:text-3xl font-bold text-white mb-6 font-poppins">
+                  Our Mission
+                </h3>
+                <p className="text-lg text-gray-300 max-w-4xl mx-auto leading-relaxed">
+                  We created TalentBook to help people and companies find their perfect match.
+                  <br /><br />
+                  That's why we made the process as fast and simple as possible. With AI, you can create your profile and CV in seconds, so you can find your match faster than ever.
+                  <br /><br />
+                  And to make it even easier – every job seeker can simply swipe through job posts until they find the right one. Then, with just a few clicks, they can apply and send their CV.
+                </p>
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {/* Feature 1 */}
-            <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-8 border border-white/10 hover:bg-white/10 transition-all duration-300 hover:-translate-y-2 group">
-              <div className="w-16 h-16 bg-gradient-to-br from-[#FFC107] to-[#FFB300] rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
-                <Sparkles className="w-8 h-8 text-white" />
-              </div>
-              <h3 className="text-2xl font-bold text-white mb-4 font-poppins">Smart Matching</h3>
-              <p className="text-gray-300 leading-relaxed">
-                Our AI-powered algorithm analyzes skills, experience, and preferences to suggest the most relevant opportunities.
-              </p>
-            </div>
-
-            {/* Feature 2 */}
-            <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-8 border border-white/10 hover:bg-white/10 transition-all duration-300 hover:-translate-y-2 group">
-              <div className="w-16 h-16 bg-gradient-to-br from-red-600 to-red-700 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
-                <Heart className="w-8 h-8 text-white" />
-              </div>
-              <h3 className="text-2xl font-bold text-white mb-4 font-poppins">Swipe to Match</h3>
-              <p className="text-gray-300 leading-relaxed">
-                Discover opportunities effortlessly with our intuitive swipe interface. Like what you see? Swipe right to connect.
-              </p>
-            </div>
-
-            {/* Feature 3 */}
-            <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-8 border border-white/10 hover:bg-white/10 transition-all duration-300 hover:-translate-y-2 group">
-              <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 group-hover:rotate-3 transition-all duration-300">
-                <Users className="w-8 h-8 text-white" />
-              </div>
-              <h3 className="text-2xl font-bold text-white mb-4 font-poppins">Direct Connect</h3>
-              <p className="text-gray-300 leading-relaxed">
-                Skip the middleman. Connect directly with hiring managers and candidates for faster, more personal interactions.
-              </p>
-            </div>
+          {/* Background Elements */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute top-1/3 right-1/4 w-64 h-64 bg-red-600/5 rounded-full blur-3xl"></div>
+            <div className="absolute bottom-1/3 left-1/4 w-64 h-64 bg-[#FFC107]/5 rounded-full blur-3xl"></div>
           </div>
-        </div>
-      </div>
+        </section>
+      )}
 
       {/* Pricing Section */}
-      <div className="bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900">
-        <Pricing 
-          plans={pricingPlans}
-          onViewAddOns={() => setShowAddOnsModal(true)}
-        />
-      </div>
+      {!user && !tempSignupData && currentPage === 'home' && (
+        <section id="pricing" className="relative bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900 -mt-8">
+          <Pricing
+            title="Choose Your Plan"
+            description="Find the perfect plan for your needs. Whether you're a job seeker or employer, we have options that scale with you."
+            plans={[
+              {
+                name: "JOB SEEKER",
+                price: "0",
+                yearlyPrice: "0",
+                period: "forever",
+                features: [
+                  "Unlimited job applications",
+                  "AI-powered profile creation",
+                  "Smart job matching",
+                  "Direct messaging with employers",
+                  "Mobile app access",
+                  "Basic analytics",
+                ],
+                description: "Perfect for professionals looking for their next opportunity",
+                buttonText: "Get Started Free",
+                href: "/sign-up",
+                isPopular: false,
+                userType: "job_seeker",
+              },
+              {
+                name: "STARTER",
+                price: "600",
+                yearlyPrice: "480",
+                period: "month",
+                features: [
+                  "3 active job posts simultaneously",
+                  "1 recruiter seat",
+                  "Up to 50 profile views/month",
+                  "200 connection invites/month",
+                  "Email support (48h SLA)",
+                  "7 days free trial",
+                  "One-time mini-package option available",
+                ],
+                description: "Perfect for small companies starting their hiring journey",
+                buttonText: "Start 7-Day Free Trial",
+                href: "/sign-up",
+                isPopular: false,
+                userType: "employer",
+              },
+              {
+                name: "GROWTH",
+                price: "1500",
+                yearlyPrice: "1200",
+                period: "month",
+                features: [
+                  "6 active job posts",
+                  "Silver promotion included (€500 value)",
+                  "200 InMails/month included (€1,000 value)",
+                  "3 recruiter seats",
+                  "Up to 300 profile views/month",
+                  "1,000 connection invites/month",
+                  "Email + chat support (24h SLA)",
+                  "10% discount on additional packages",
+                ],
+                description: "Ideal for growing companies and HR teams",
+                buttonText: "Start Free Trial",
+                href: "/sign-up",
+                isPopular: true,
+                userType: "employer",
+              },
+              {
+                name: "SCALE (UNLIMITED)",
+                price: "5000",
+                yearlyPrice: "5000",
+                period: "year",
+                features: [
+                  "Unlimited job posts (up to 25 active)",
+                  "5 recruiter seats",
+                  "Advanced search + shortlist export",
+                  "Dedicated account manager",
+                  "25% discount on promo packages",
+                  "Annual promotion bundle available",
+                  "Priority support (4h SLA)",
+                  "Quarterly business reviews",
+                ],
+                description: "For large organizations with specific requirements",
+                buttonText: "Contact Sales",
+                href: "/contact",
+                isPopular: false,
+                userType: "employer",
+              },
+            ]}
+          />
 
-      {/* CTA Section */}
-      <div className="py-16 lg:py-24 bg-gradient-to-r from-[#FFC107]/10 to-red-600/10">
-        <div className="max-w-4xl mx-auto text-center px-6">
-          <h2 className="text-4xl sm:text-5xl font-bold text-white mb-6 font-poppins">
-            Ready to Find Your Perfect Match?
-          </h2>
-          <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
-            Join thousands of professionals who have already discovered their ideal career opportunities through TalentBook.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button
-              onClick={() => setShowSignupModal(true)}
-              className="bg-[#FFC107] hover:bg-[#FFB300] text-black px-8 py-4 rounded-lg font-bold text-lg transition-all duration-200 hover:shadow-lg hover:shadow-[#FFC107]/25 hover:-translate-y-1"
-            >
-              Get Started Free
-            </button>
-            <button
-              onClick={() => setShowLoginModal(true)}
-              className="bg-white/10 hover:bg-white/20 text-white px-8 py-4 rounded-lg font-bold text-lg transition-all duration-200 border-2 border-white/20 hover:border-white/40 backdrop-blur-sm"
-            >
-              Sign In
-            </button>
+          {/* Background Elements */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-red-600/5 rounded-full blur-3xl"></div>
+            <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-[#FFC107]/5 rounded-full blur-3xl"></div>
           </div>
-        </div>
-      </div>
+        </section>
+      )}
 
-      {/* Footer */}
-      <footer className="bg-neutral-900/50 backdrop-blur-sm border-t border-white/10 py-12">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-            {/* Company Info */}
-            <div className="space-y-4">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-lg overflow-hidden">
-                  <img 
-                    src="/talent book singular icon.png" 
-                    alt="TalentBook Icon" 
-                    className="w-full h-full object-contain"
-                  />
-                </div>
-                <span className="text-xl font-bold text-white font-poppins">TalentBook</span>
+      {/* Contact Section */}
+      {!user && !tempSignupData && currentPage === 'home' && (
+        <section id="contact" className="relative bg-gradient-to-br from-neutral-800 via-neutral-900 to-neutral-800 py-16 lg:py-24">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            {/* Section Header */}
+            <div className="text-center mb-16">
+              <div className="inline-flex items-center bg-gradient-to-r from-red-600/20 to-[#FFC107]/20 rounded-full px-4 py-2 mb-6 border border-red-600/30">
+                <span className="text-[#FFC107] text-sm font-medium">Get in Touch</span>
               </div>
-              <p className="text-gray-400 text-sm leading-relaxed">
-                Revolutionizing recruitment through intelligent matching and seamless user experience.
+              <h2 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-6 font-poppins">
+                Do you want to ask a question?
+              </h2>
+              <p className="text-xl text-gray-300 max-w-3xl mx-auto leading-relaxed">
+                Have questions about TalentBook? Want to learn more about our enterprise solutions? 
+                We'd love to hear from you.
               </p>
             </div>
 
-            {/* Quick Links */}
-            <div>
-              <h3 className="text-white font-semibold mb-4">Platform</h3>
-              <ul className="space-y-2 text-sm">
-                <li><a href="#" className="text-gray-400 hover:text-white transition-colors duration-200">How it Works</a></li>
-                <li><a href="#" className="text-gray-400 hover:text-white transition-colors duration-200">For Job Seekers</a></li>
-                <li><a href="#" className="text-gray-400 hover:text-white transition-colors duration-200">For Employers</a></li>
-                <li><a href="#" className="text-gray-400 hover:text-white transition-colors duration-200">Success Stories</a></li>
-              </ul>
-            </div>
-
-            {/* Support */}
-            <div>
-              <h3 className="text-white font-semibold mb-4">Support</h3>
-              <ul className="space-y-2 text-sm">
-                <li><a href="#" className="text-gray-400 hover:text-white transition-colors duration-200">Help Center</a></li>
-                <li><a href="#" className="text-gray-400 hover:text-white transition-colors duration-200">Contact Us</a></li>
-                <li><a href="#" className="text-gray-400 hover:text-white transition-colors duration-200">API Documentation</a></li>
-                <li><a href="#" className="text-gray-400 hover:text-white transition-colors duration-200">Status Page</a></li>
-              </ul>
-            </div>
-
-            {/* Legal */}
-            <div>
-              <h3 className="text-white font-semibold mb-4">Legal</h3>
-              <ul className="space-y-2 text-sm">
-                <li>
-                  <button 
-                    onClick={() => setShowPrivacyTermsModal(true)}
-                    className="text-gray-400 hover:text-white transition-colors duration-200 text-left"
+            {/* Contact Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 max-w-5xl mx-auto">
+              {/* Contact Form */}
+              <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-8 border border-white/10">
+                <h3 className="text-2xl font-semibold text-white mb-6 font-poppins">Send us a message</h3>
+                <form className="space-y-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="firstName" className="block text-sm font-medium text-gray-300 mb-2">
+                        First Name
+                      </label>
+                      <input
+                        type="text"
+                        id="firstName"
+                        className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all duration-200"
+                        placeholder="John"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="lastName" className="block text-sm font-medium text-gray-300 mb-2">
+                        Last Name
+                      </label>
+                      <input
+                        type="text"
+                        id="lastName"
+                        className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all duration-200"
+                        placeholder="Doe"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
+                      Email
+                    </label>
+                    <input
+                      type="email"
+                      id="email"
+                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all duration-200"
+                      placeholder="john@example.com"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="company" className="block text-sm font-medium text-gray-300 mb-2">
+                      Company (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      id="company"
+                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all duration-200"
+                      placeholder="Your Company"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="message" className="block text-sm font-medium text-gray-300 mb-2">
+                      Message
+                    </label>
+                    <textarea
+                      id="message"
+                      rows={4}
+                      className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-600 focus:border-transparent transition-all duration-200 resize-none"
+                      placeholder="Tell us about your needs..."
+                    ></textarea>
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white px-8 py-4 rounded-xl font-semibold transition-all duration-200 hover:shadow-lg hover:shadow-red-600/25"
                   >
-                    Privacy Policy
+                    Send Message
                   </button>
-                </li>
-                <li>
-                  <button 
-                    onClick={() => setShowPrivacyTermsModal(true)}
-                    className="text-gray-400 hover:text-white transition-colors duration-200 text-left"
-                  >
-                    Terms of Service
-                  </button>
-                </li>
-                <li><a href="#" className="text-gray-400 hover:text-white transition-colors duration-200">Cookie Policy</a></li>
-                <li><a href="#" className="text-gray-400 hover:text-white transition-colors duration-200">GDPR</a></li>
-              </ul>
+                </form>
+              </div>
+
+              {/* Contact Information */}
+              <div className="space-y-8">
+                <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-8 border border-white/10">
+                  <h3 className="text-2xl font-semibold text-white mb-6 font-poppins">Contact Information</h3>
+                  <div className="space-y-6">
+                    <div className="flex items-start space-x-4">
+                      <div className="w-12 h-12 bg-gradient-to-br from-red-600 to-red-700 rounded-xl flex items-center justify-center flex-shrink-0">
+                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h4 className="text-lg font-semibold text-white mb-1">Email</h4>
+                        <p className="text-gray-300">hello@talentbook.com</p>
+                        <p className="text-gray-300">support@talentbook.com</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start space-x-4">
+                      <div className="w-12 h-12 bg-gradient-to-br from-[#FFC107] to-[#FFB300] rounded-xl flex items-center justify-center flex-shrink-0">
+                        <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h4 className="text-lg font-semibold text-white mb-1">Phone</h4>
+                        <p className="text-gray-300">+1 (555) 123-4567</p>
+                        <p className="text-gray-400 text-sm">Mon-Fri 9AM-6PM EST</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* FAQ Quick Links */}
+                <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-8 border border-white/10">
+                  <h3 className="text-xl font-semibold text-white mb-4 font-poppins">Quick Help</h3>
+                  <div className="space-y-3">
+                    <a href="#" className="block text-gray-300 hover:text-white transition-colors duration-200 hover:translate-x-1 transform">
+                      → How does TalentBook work?
+                    </a>
+                    <a href="#" className="block text-gray-300 hover:text-white transition-colors duration-200 hover:translate-x-1 transform">
+                      → Pricing and billing questions
+                    </a>
+                    <a href="#" className="block text-gray-300 hover:text-white transition-colors duration-200 hover:translate-x-1 transform">
+                      → Enterprise solutions
+                    </a>
+                    <a href="#" className="block text-gray-300 hover:text-white transition-colors duration-200 hover:translate-x-1 transform">
+                      → Technical support
+                    </a>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="border-t border-white/10 mt-12 pt-8 text-center">
-            <p className="text-gray-400 text-sm">
-              © 2025 TalentBook. All rights reserved. Made with ❤️ for the future of work.
-            </p>
+          {/* Background Elements */}
+          <div className="absolute inset-0 overflow-hidden pointer-events-none">
+            <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-red-600/5 rounded-full blur-3xl"></div>
+            <div className="absolute bottom-1/4 right-1/4 w-64 h-64 bg-[#FFC107]/5 rounded-full blur-3xl"></div>
+          </div>
+        </section>
+      )}
+
+      {/* Footer */}
+      {currentPage === 'home' && (
+        <footer className="relative bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900 py-8 border-t border-white/10">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0">
+            {/* Logo and Copyright */}
+            <div className="flex items-center space-x-4">
+              <span className="text-gray-400 text-sm">
+                © 2025 TalentBook. All rights reserved.
+              </span>
+            </div>
+
+            {/* Links */}
+            <div className="flex items-center space-x-6">
+              <a 
+                href="/privacy-terms" 
+                onClick={(e) => {
+                  e.preventDefault();
+                  setIsPrivacyTermsModalOpen(true);
+                }}
+                className="text-gray-400 hover:text-[#FFC107] transition-colors duration-200 text-sm"
+              >
+                Privacy Policy and Terms of Use
+              </a>
+            </div>
           </div>
         </div>
-      </footer>
-
-      {/* Modals */}
-      <LoginModal
-        isOpen={showLoginModal}
-        onClose={() => setShowLoginModal(false)}
-        onSwitchToSignup={() => setShowSignupModal(true)}
-      />
-
-      <SignupModal
-        isOpen={showSignupModal}
-        onClose={() => setShowSignupModal(false)}
-        onSwitchToLogin={() => setShowLoginModal(true)}
-        onContinueSignup={handleContinueSignup}
-        onOpenPrivacyTerms={() => setShowPrivacyTermsModal(true)}
-      />
-
-      <PrivacyTermsModal
-        isOpen={showPrivacyTermsModal}
-        onClose={() => setShowPrivacyTermsModal(false)}
-      />
-
-      <AddOnsModal
-        isOpen={showAddOnsModal}
-        onClose={() => setShowAddOnsModal(false)}
-      />
-
-      {selectedJob && (
-        <JobDetailsModal
-          isOpen={showJobDetails}
-          onClose={() => setShowJobDetails(false)}
-          job={selectedJob}
-          userId={user?.id || null}
-        />
+        </footer>
       )}
-    </div>
-  )
-}
 
-export default App
+      {/* Signup Modal */}
+      <SignupModal 
+        isOpen={isSignupModalOpen} 
+        onClose={() => setIsSignupModalOpen(false)} 
+        onSwitchToLogin={() => setIsLoginModalOpen(true)}
+        onContinueSignup={handleContinueSignup}
+        onOpenPrivacyTerms={() => setIsPrivacyTermsModalOpen(true)}
+      />
+
+      {/* Login Modal */}
+      <LoginModal 
+        isOpen={isLoginModalOpen} 
+        onClose={() => setIsLoginModalOpen(false)} 
+        onSwitchToSignup={() => setIsSignupModalOpen(true)}
+      />
+
+      {/* Job Details Modal */}
+      <JobDetailsModal
+        isOpen={isJobDetailsModalOpen}
+        onClose={() => setIsJobDetailsModalOpen(false)}
+        job={selectedJob}
+        userId={user?.id || null}
+      />
+
+      {/* Privacy Terms Modal */}
+      <PrivacyTermsModal
+        isOpen={isPrivacyTermsModalOpen}
+        onClose={() => setIsPrivacyTermsModalOpen(false)}
+      />
+    </div>
+  );
+}
