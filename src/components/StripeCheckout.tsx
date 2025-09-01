@@ -42,7 +42,9 @@ export function StripeCheckout({
         body: JSON.stringify({
           price_id: product.priceId,
           mode: product.mode,
-          success_url: `${window.location.origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+          success_url: product.category === 'verification' 
+            ? `${window.location.origin}/checkout/verify-success?session_id={CHECKOUT_SESSION_ID}`
+            : `${window.location.origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: `${window.location.origin}/checkout/cancel`,
         }),
       })

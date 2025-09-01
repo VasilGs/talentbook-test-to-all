@@ -14,6 +14,7 @@ import { CompanyProfileView } from './components/CompanyProfileView'
 import { PrivacyTermsModal } from './components/PrivacyTermsModal'
 import { CheckoutSuccess } from './components/CheckoutSuccess'
 import { CheckoutCancel } from './components/CheckoutCancel'
+import { CheckoutVerifySuccess } from './components/CheckoutVerifySuccess'
 import { SubscriptionStatus } from './components/SubscriptionStatus'
 import { supabase, type User } from './lib/supabase'
 import { Routes, Route, useNavigate } from 'react-router-dom'
@@ -83,7 +84,7 @@ export default function App() {
   const navigate = useNavigate()
   const routed = useRef(false)
 
-  // Legacy local “pages” inside the landing view
+  // Legacy local "pages" inside the landing view
   const [currentPage, setCurrentPage] = useState<'home' | 'search-jobs' | 'complete-profile' | 'user-profile'>('home')
 
   // Profile state
@@ -457,6 +458,7 @@ export default function App() {
         {/* CHECKOUT */}
         <Route path="/checkout/success" element={<CheckoutSuccess />} />
         <Route path="/checkout/cancel" element={<CheckoutCancel />} />
+        <Route path="/checkout/verify-success" element={<CheckoutVerifySuccess />} />
 
         {/* 404 */}
         <Route path="*" element={<div className="p-6 text-white">Not Found</div>} />
