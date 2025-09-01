@@ -959,17 +959,51 @@ function LandingView(props: {
 
       {/* Pricing (Stripe-driven) */}
       {!user && !tempSignupData && currentPage === 'home' && (
-        <section id="pricing" className="relative bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900 -mt-8">
-          <Pricing
-            title="Choose Your Plan"
-            description="Find the perfect plan for your needs. Whether you're a job seeker or employer, we have options that scale with you."
-          />
-          {/* Background */}
-          <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-red-600/5 rounded-full blur-3xl"></div>
-            <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-[#FFC107]/5 rounded-full blur-3xl"></div>
-          </div>
-        </section>
+<section id="pricing" className="relative bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900 -mt-8">
+  <Pricing
+    title="Choose Your Plan"
+    description="Find the perfect plan for your needs. Whether you're a job seeker or employer, we have options that scale with you."
+    plans={[
+      {
+        // Popular
+        name: "EMPLOYER GROWTH",
+        price: "1500",          // monthly price
+        yearlyPrice: "14400",   // yearly price (billed annually)
+        period: "month",        // the component will override the label with 'year' when annual is on (see fix below)
+        features: [
+          "Enhanced recruiting capabilities",
+          "Priority support",
+        ],
+        description: "Enhanced recruiting capabilities with priority support",
+        buttonText: "Get Started",
+        href: "/sign-up",
+        isPopular: true,
+        userType: "employer",
+      },
+      {
+        name: "EMPLOYER SCALE (UNLIMITED)",
+        price: "5000",
+        yearlyPrice: "48000",
+        period: "month",
+        features: [
+          "Unlimited job posts",
+          "Advanced recruiting tools for large enterprises",
+        ],
+        description: "Unlimited job posts and advanced recruiting tools for large enterprises.",
+        buttonText: "Get Started",
+        href: "/sign-up",
+        isPopular: false,
+        userType: "employer",
+      },
+    ]}
+  />
+
+  {/* Background */}
+  <div className="absolute inset-0 overflow-hidden pointer-events-none">
+    <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-red-600/5 rounded-full blur-3xl"></div>
+    <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-[#FFC107]/5 rounded-full blur-3xl"></div>
+  </div>
+</section>
       )}
 
       {/* Contact (restored) */}
