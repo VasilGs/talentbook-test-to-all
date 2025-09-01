@@ -25,23 +25,28 @@ export function StripeCheckout({
     setLoading(true)
     
     try {
-      // Get the current user session
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      
-      if (sessionError || !session) {
-        throw new Error('Please log in to continue with checkout')
+      // For verification products, allow unauthenticated checkout
+      let session = null
+      if (product.category !== 'verification') {
+        const { data: { session: userSession }, error: sessionError } = await supabase.auth.getSession()
+        
+        if (sessionError || !userSession) {
+          throw new Error('Please log in to continue with checkout')
+        }
+        session = userSession
       }
 
       // Create checkout session
       const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/stripe-checkout`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${session.access_token}`,
+          ...(session && { 'Authorization': `Bearer ${session.access_token}` }),
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           price_id: product.priceId,
           mode: product.mode,
+          category: product.category,
           success_url: product.category === 'verification' 
             ? `${window.location.origin}/checkout/verify-success?session_id={CHECKOUT_SESSION_ID}`
             : `${window.location.origin}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
