@@ -13,24 +13,24 @@ import confetti from "canvas-confetti";
 import NumberFlow from "@number-flow/react";
 import { Briefcase, Users, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { stripeProducts, getProductsByCategory, formatPrice } from "../../stripe-config";
+import { getProductsByCategory } from "../../stripe-config";
 import { User } from "@supabase/supabase-js";
 
+/* ---------- Types you can pass from App (optional) ---------- */
 interface PricingPlan {
   name: string;
-  price: string;
-  yearlyPrice: string;
-  period: string;
+  price: string;        // monthly price in EUR (as string)
+  yearlyPrice: string;  // yearly price in EUR (as string)
+  period: string;       // "month"
   features: string[];
   description: string;
   buttonText: string;
   href: string;
   isPopular: boolean;
-  userType: 'job_seeker' | 'employer';
+  userType: "job_seeker" | "employer";
 }
-
 interface PricingProps {
-  plans?: PricingPlan[];
+  plans?: PricingPlan[];    // if provided, overrides Stripe products
   title?: string;
   description?: string;
   user?: User | null;
@@ -49,39 +49,9 @@ export function Pricing({
   const [isMonthly, setIsMonthly] = useState(true);
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const switchRef = useRef<HTMLButtonElement>(null);
-  const [selectedUserType, setSelectedUserType] = useState<'job_seeker' | 'employer'>('job_seeker');
+  const [selectedUserType, setSelectedUserType] =
+    useState<"job_seeker" | "employer">("job_seeker");
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
-
-  // Define the free plan
-  const freePlan = {
-    id: 'free-plan',
-    priceId: 'free',
-    name: 'Free Plan',
-    description: selectedUserType === 'job_seeker' 
-      ? 'Perfect for getting started with job searching. Create your profile and start browsing opportunities.'
-      : 'Ideal for small businesses to get started. Post your first job and find great candidates.',
-    mode: 'payment' as const,
-    price: 0,
-    currency: 'eur',
-    category: 'subscription' as const,
-    features: selectedUserType === 'job_seeker' 
-      ? [
-          'Create and customize your professional profile',
-          'Browse and search through job listings',
-          'Save jobs for later review',
-          'Apply to unlimited job positions',
-          'Basic profile visibility to employers',
-          'Access to platform messaging system'
-        ]
-      : [
-          'Create and manage your company profile',
-          'Post up to 1 job listing per month',
-          'Browse candidate profiles',
-          'Receive and manage job applications',
-          'Basic company visibility',
-          'Access to applicant tracking system'
-        ]
-  };
 
   const handleToggle = (checked: boolean) => {
     setIsMonthly(!checked);
@@ -89,20 +59,11 @@ export function Pricing({
       const rect = switchRef.current.getBoundingClientRect();
       const x = rect.left + rect.width / 2;
       const y = rect.top + rect.height / 2;
-
       confetti({
         particleCount: 50,
         spread: 60,
-        origin: {
-          x: x / window.innerWidth,
-          y: y / window.innerHeight,
-        },
-        colors: [
-          "#dc2626",
-          "#f59e0b",
-          "#ef4444",
-          "#fbbf24",
-        ],
+        origin: { x: x / window.innerWidth, y: y / window.innerHeight },
+        colors: ["#dc2626", "#f59e0b", "#ef4444", "#fbbf24"],
         ticks: 200,
         gravity: 1.2,
         decay: 0.94,
@@ -112,20 +73,50 @@ export function Pricing({
     }
   };
 
-  // Get subscription plans from Stripe config
-  const paidSubscriptionPlans = getProductsByCategory('subscription').filter(product => {
-    // Filter by user type based on product name
-    if (selectedUserType === 'job_seeker') {
-      return product.name.includes('Candidates')
-    } else {
-      return product.name.includes('Employer')
-    }
-  })
+  /* ---------- Source of paid plans ----------
+     1) If 'plans' prop is passed, convert to the shape StripeCheckout expects.
+     2) Otherwise, read from Stripe config and filter by user type.
+  ------------------------------------------- */
+  const paidSubscriptionPlans =
+    plans.length > 0
+      ? plans
+          .filter((p) => p.userType === selectedUserType)
+          .map((p) => ({
+            id: p.name,
+            priceId: p.name, // dummy for StripeCheckout when using custom plans
+            name: p.name,
+            description: p.description,
+            popular: p.isPopular,
+            mode: "subscription" as const,
+            // Convert to cents to match StripeCheckout expectations
+            price: Math.round(Number(isMonthly ? p.price : p.yearlyPrice) * 100),
+            currency: "eur",
+            category: "subscription" as const,
+          }))
+      : getProductsByCategory("subscription").filter((product) => {
+          // Filter only employer/candidate plans by name
+          return selectedUserType === "job_seeker"
+            ? product.name.toLowerCase().includes("candidate") ||
+                product.name.toLowerCase().includes("candidates")
+            : product.name.toLowerCase().includes("employer");
+        });
 
   const handleCheckoutError = (error: string) => {
-    setCheckoutError(error)
-    setTimeout(() => setCheckoutError(null), 5000)
-  }
+    setCheckoutError(error);
+    setTimeout(() => setCheckoutError(null), 5000);
+  };
+
+  // Dynamic grid columns (keep Tailwind classes explicit so they’re not purged)
+  const gridColsMd =
+    paidSubscriptionPlans.length <= 1
+      ? "md:grid-cols-1"
+      : paidSubscriptionPlans.length === 2
+      ? "md:grid-cols-2"
+      : "md:grid-cols-3";
+  const gridColsLg =
+    paidSubscriptionPlans.length >= 3 ? "lg:grid-cols-3" : "lg:grid-cols-2";
+
+  const unit = isMonthly ? "month" : "year";
 
   return (
     <div className="py-16 lg:py-24">
@@ -136,27 +127,27 @@ export function Pricing({
         <p className="text-gray-300 text-lg whitespace-pre-line max-w-3xl mx-auto">
           {description}
         </p>
-        
+
         {/* User Type Selection */}
         <div className="flex justify-center mt-8 mb-8">
           <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-2 border border-white/10 flex items-center space-x-2">
             <button
-              onClick={() => setSelectedUserType('job_seeker')}
+              onClick={() => setSelectedUserType("job_seeker")}
               className={`flex items-center space-x-3 px-6 py-3 rounded-xl font-semibold transition-all duration-300 ${
-                selectedUserType === 'job_seeker'
-                  ? 'bg-[#FFC107] text-black shadow-lg shadow-[#FFC107]/25'
-                  : 'bg-transparent text-gray-300 hover:bg-white/10 hover:text-white'
+                selectedUserType === "job_seeker"
+                  ? "bg-[#FFC107] text-black shadow-lg shadow-[#FFC107]/25"
+                  : "bg-transparent text-gray-300 hover:bg-white/10 hover:text-white"
               }`}
             >
               <Briefcase className="w-5 h-5" />
               <span>For Job Seekers</span>
             </button>
             <button
-              onClick={() => setSelectedUserType('employer')}
+              onClick={() => setSelectedUserType("employer")}
               className={`flex items-center space-x-3 px-6 py-3 rounded-xl font-semibold transition-all duration-300 ${
-                selectedUserType === 'employer'
-                  ? 'bg-[#FFC107] text-black shadow-lg shadow-[#FFC107]/25'
-                  : 'bg-transparent text-gray-300 hover:bg-white/10 hover:text-white'
+                selectedUserType === "employer"
+                  ? "bg-[#FFC107] text-black shadow-lg shadow-[#FFC107]/25"
+                  : "bg-transparent text-gray-300 hover:bg-white/10 hover:text-white"
               }`}
             >
               <Users className="w-5 h-5" />
@@ -174,6 +165,8 @@ export function Pricing({
           </div>
         </div>
       )}
+
+      {/* Billing Toggle */}
       <div className="flex justify-center items-center mb-10 space-x-4">
         <span className="text-white font-medium">Monthly</span>
         <Label>
@@ -189,84 +182,42 @@ export function Pricing({
         </span>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Free Plan */}
-        <motion.div
-          initial={{ y: 50, opacity: 0 }}
-          whileInView={{ y: 0, opacity: 1 }}
-          viewport={{ once: true }}
-          transition={{
-            duration: 1.6,
-            type: "spring",
-            stiffness: 100,
-            damping: 30,
-            delay: 0.2,
-            opacity: { duration: 0.5 },
-          }}
-          className="rounded-2xl border border-white/20 p-8 bg-white/5 backdrop-blur-sm text-center lg:flex lg:flex-col lg:justify-center relative flex flex-col"
-        >
-          <div className="flex-1 flex flex-col">
-            <p className="text-base font-semibold text-gray-300 uppercase tracking-wide">
-              {freePlan.name}
-            </p>
-            <div className="mt-6 flex items-center justify-center gap-x-2">
-              <span className="text-5xl font-bold tracking-tight text-white">
-                €0
-              </span>
-              <span className="text-sm font-semibold leading-6 tracking-wide text-gray-400">
-                / month
-              </span>
-            </div>
-
-            <p className="text-xs leading-5 text-gray-400 mb-6">
-              forever free
-            </p>
-
-            <ul className="mt-5 gap-3 flex flex-col">
-              {freePlan.features.map((feature, idx) => (
-                <li key={idx} className="flex items-start gap-3">
-                  <Check className="h-5 w-5 text-red-400 mt-0.5 flex-shrink-0" />
-                  <span className="text-left text-gray-300">{feature}</span>
-                </li>
-              ))}
-            </ul>
-
-            <hr className="w-full my-6 border-white/20" />
-
-            <Button
-              onClick={user ? undefined : openSignup}
-              disabled={!!user}
-              className={cn(
-                buttonVariants({
-                  variant: "outline",
-                }),
-                "group relative w-full gap-2 overflow-hidden text-lg font-semibold tracking-tighter",
-                "transform-gpu ring-offset-current transition-all duration-300 ease-out",
-                user 
-                  ? "bg-gray-600 text-gray-300 border-gray-600 cursor-not-allowed"
-                  : "bg-transparent text-white border-white/30 hover:bg-[#FFC107] hover:text-black hover:border-[#FFC107] hover:ring-2 hover:ring-[#FFC107] hover:ring-offset-1"
-              )}
-            >
-              {user ? 'Current Plan' : 'Get Started Free'}
-            </Button>
-            <p className="mt-4 text-xs leading-5 text-gray-400">
-              {freePlan.description}
-            </p>
-          </div>
-        </motion.div>
-
-        {/* Paid Plans */}
+      {/* PAID PLANS ONLY (Free card removed) */}
+      <div
+        className={cn(
+          "grid grid-cols-1 gap-8 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8",
+          gridColsMd,
+          gridColsLg
+        )}
+      >
         {paidSubscriptionPlans.map((plan, index) => (
           <motion.div
-            key={index}
+            key={plan.id ?? index}
             initial={{ y: 50, opacity: 0 }}
             whileInView={
               isDesktop
                 ? {
                     y: plan.popular ? -20 : 0,
                     opacity: 1,
-                    x: paidSubscriptionPlans.length === 2 ? (index === 1 ? -30 : 30) : paidSubscriptionPlans.length === 3 ? (index === 2 ? -30 : index === 0 ? 30 : 0) : 0,
-                    scale: (paidSubscriptionPlans.length === 2 && (index === 0 || index === 1)) || (paidSubscriptionPlans.length === 3 && (index === 0 || index === 2)) ? 0.94 : 1.0,
+                    x:
+                      paidSubscriptionPlans.length === 2
+                        ? index === 1
+                          ? -30
+                          : 30
+                        : paidSubscriptionPlans.length === 3
+                        ? index === 2
+                          ? -30
+                          : index === 0
+                          ? 30
+                          : 0
+                        : 0,
+                    scale:
+                      (paidSubscriptionPlans.length === 2 &&
+                        (index === 0 || index === 1)) ||
+                      (paidSubscriptionPlans.length === 3 &&
+                        (index === 0 || index === 2))
+                        ? 0.94
+                        : 1.0,
                   }
                 : { y: 0, opacity: 1 }
             }
@@ -276,7 +227,7 @@ export function Pricing({
               type: "spring",
               stiffness: 100,
               damping: 30,
-              delay: 0.4 + (index * 0.1),
+              delay: 0.4 + index * 0.1,
               opacity: { duration: 0.5 },
             }}
             className={cn(
@@ -284,9 +235,12 @@ export function Pricing({
               plan.popular ? "border-[#FFC107] border-2" : "border-white/20",
               "flex flex-col",
               !plan.popular && "mt-5",
-              (paidSubscriptionPlans.length === 2 && (index === 0 || index === 1)) || (paidSubscriptionPlans.length === 3 && (index === 0 || index === 2))
+              (paidSubscriptionPlans.length === 2 &&
+                (index === 0 || index === 1)) ||
+                (paidSubscriptionPlans.length === 3 &&
+                  (index === 0 || index === 2))
                 ? "z-0 transform translate-x-0 translate-y-0"
-                : "z-10",
+                : "z-10"
             )}
           >
             {plan.popular && (
@@ -297,15 +251,22 @@ export function Pricing({
                 </span>
               </div>
             )}
+
             <div className="flex-1 flex flex-col">
               <p className="text-base font-semibold text-gray-300 uppercase tracking-wide">
                 {plan.name}
               </p>
+
+              {/* Price + unit */}
               <div className="mt-6 flex items-center justify-center gap-x-2">
                 <span className="text-5xl font-bold tracking-tight text-white">
                   <NumberFlow
                     value={
-                      isMonthly ? plan.price / 100 : (plan.price * 12 * 0.8) / 100
+                      // Stripe products come with price in cents for MONTHLY.
+                      // For annual: 12 * monthly * 0.8 (20% off), also in cents.
+                      isMonthly
+                        ? plan.price / 100
+                        : Math.round((plan.price * 12 * 0.8) / 100)
                     }
                     format={{
                       style: "currency",
@@ -314,17 +275,14 @@ export function Pricing({
                       maximumFractionDigits: 0,
                     }}
                     formatter={(value) => `€${value}`}
-                    transformTiming={{
-                      duration: 500,
-                      easing: "ease-out",
-                    }}
+                    transformTiming={{ duration: 500, easing: "ease-out" }}
                     willChange
                     className="font-variant-numeric: tabular-nums"
                   />
                 </span>
-                {plan.mode === 'subscription' && (
+                {plan.mode === "subscription" && (
                   <span className="text-sm font-semibold leading-6 tracking-wide text-gray-400">
-                    / month
+                    / {unit}
                   </span>
                 )}
               </div>
@@ -333,24 +291,34 @@ export function Pricing({
                 {isMonthly ? "billed monthly" : "billed annually"}
               </p>
 
+              {/* Simple bullet list from description sentences */}
               <ul className="mt-5 gap-3 flex flex-col">
-                {plan.description.split('.').filter(f => f.trim()).map((feature, idx) => (
-                  <li key={idx} className="flex items-start gap-3">
-                    <Check className="h-5 w-5 text-red-400 mt-0.5 flex-shrink-0" />
-                    <span className="text-left text-gray-300">{feature.trim()}</span>
-                  </li>
-                ))}
+                {String(plan.description || "")
+                  .split(".")
+                  .filter((f) => f.trim())
+                  .map((feature, idx) => (
+                    <li key={idx} className="flex items-start gap-3">
+                      <Check className="h-5 w-5 text-red-400 mt-0.5 flex-shrink-0" />
+                      <span className="text-left text-gray-300">
+                        {feature.trim()}
+                      </span>
+                    </li>
+                  ))}
               </ul>
 
               <hr className="w-full my-6 border-white/20" />
 
               <StripeCheckout
-                product={plan}
+                product={{
+                  ...plan,
+                  // Important: send the correct price (in cents) based on the toggle
+                  price: isMonthly
+                    ? plan.price
+                    : Math.round(plan.price * 12 * 0.8),
+                }}
                 onError={handleCheckoutError}
                 className={cn(
-                  buttonVariants({
-                    variant: "outline",
-                  }),
+                  buttonVariants({ variant: "outline" }),
                   "group relative w-full gap-2 overflow-hidden text-lg font-semibold tracking-tighter",
                   "transform-gpu ring-offset-current transition-all duration-300 ease-out hover:ring-2 hover:ring-[#FFC107] hover:ring-offset-1",
                   plan.popular
@@ -360,6 +328,8 @@ export function Pricing({
               >
                 Get Started
               </StripeCheckout>
+
+              {/* keep the short text under the button */}
               <p className="mt-4 text-xs leading-5 text-gray-400">
                 {plan.description}
               </p>
@@ -368,7 +338,7 @@ export function Pricing({
         ))}
       </div>
 
-      {/* New button for Add-ons */}
+      {/* Optional Add-ons button */}
       {onViewAddOns && (
         <div className="mt-12 text-center">
           <Button
@@ -380,7 +350,6 @@ export function Pricing({
           </Button>
         </div>
       )}
-
     </div>
   );
 }
