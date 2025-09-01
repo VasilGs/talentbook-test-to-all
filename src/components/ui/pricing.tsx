@@ -232,7 +232,6 @@ export function Pricing({
             </ul>
 
             <hr className="w-full my-6 border-white/20" />
-
                 delay: 0.4 + (index * 0.1),
               onClick={user ? undefined : openSignup}
               disabled={!!user}
