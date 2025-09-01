@@ -4,6 +4,8 @@ import { Button } from './ui/button'
 import { Label } from './ui/label'
 import { User, Mail, Lock, Sparkles, Briefcase, Building2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { StripeCheckout } from './StripeCheckout'
+import { getProductsByCategory } from '../stripe-config'
 
 interface SignupData {
   name: string
@@ -29,22 +31,24 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin, onContinueSignup
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [checkoutError, setCheckoutError] = useState<string | null>(null)
+
+  // Get verification product
+  const verificationProduct = getProductsByCategory('verification')[0]
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    setCheckoutError(null)
 
-    // Pass signup data to parent component
-    onContinueSignup({
+    // Store signup data in sessionStorage for post-payment processing
+    const signupData = {
       name: formData.name,
       email: formData.email,
       password: formData.password,
       userType: formData.userType
-    })
-    
-    // Reset form and close modal
-    setFormData({ name: '', email: '', password: '', userType: 'job_seeker' })
-    onClose()
+    }
+    sessionStorage.setItem('pendingSignupData', JSON.stringify(signupData))
   }
 
   const handleInputChange = (field: string, value: string | 'job_seeker' | 'company') => {
@@ -66,6 +70,17 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin, onContinueSignup
     }))
   }
 
+  const handleCheckoutSuccess = () => {
+    // Close modal - user will be redirected to verify-success page
+    onClose()
+  }
+
+  const handleCheckoutError = (error: string) => {
+    setCheckoutError(error)
+    // Clear stored signup data on error
+    sessionStorage.removeItem('pendingSignupData')
+  }
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} className="bg-gradient-to-br from-neutral-800 via-neutral-900 to-neutral-800 border border-white/20">
       <div className="p-8">
@@ -82,13 +97,20 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin, onContinueSignup
             Join TalentBook
           </h2>
           <p className="text-gray-300">
-            Create your free account and start finding your perfect match
+            Create your verified account with our €1 verification fee
           </p>
           
           {/* Error Message */}
           {error && (
             <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
               <p className="text-red-400 text-sm">{error}</p>
+            </div>
+          )}
+          
+          {/* Checkout Error Message */}
+          {checkoutError && (
+            <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+              <p className="text-red-400 text-sm">{checkoutError}</p>
             </div>
           )}
         </div>
@@ -232,13 +254,27 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin, onContinueSignup
           </div>
 
           {/* Submit Button */}
-          <Button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-[#FFC107] hover:bg-[#FFB300] text-black py-3 rounded-lg font-semibold transition-all duration-200 hover:shadow-lg hover:shadow-[#FFC107]/25"
-          >
-            {loading ? 'Creating Account...' : 'Create Free Account'}
-          </Button>
+          {verificationProduct ? (
+            <StripeCheckout
+              product={{
+                ...verificationProduct,
+                mode: 'payment' as const
+              }}
+              onSuccess={handleCheckoutSuccess}
+              onError={handleCheckoutError}
+              className="w-full bg-[#FFC107] hover:bg-[#FFB300] text-black py-3 rounded-lg font-semibold transition-all duration-200 hover:shadow-lg hover:shadow-[#FFC107]/25"
+            >
+              Pay €1.00 to Create Account
+            </StripeCheckout>
+          ) : (
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-[#FFC107] hover:bg-[#FFB300] text-black py-3 rounded-lg font-semibold transition-all duration-200 hover:shadow-lg hover:shadow-[#FFC107]/25"
+            >
+              {loading ? 'Creating Account...' : 'Create Account'}
+            </Button>
+          )}
         </form>
 
         {/* Footer */}
@@ -279,6 +315,10 @@ export function SignupModal({ isOpen, onClose, onSwitchToLogin, onContinueSignup
             >
               Privacy Policy
             </button>
+            <br />
+            <span className="text-gray-400">
+              A €1.00 verification fee is required to create your account and unlock all features.
+            </span>
           </p>
         </div>
       </div>
