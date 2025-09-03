@@ -224,7 +224,6 @@ export const getProductByPriceId = (priceId: string) => {
   return stripeProducts.find(product => product.priceId === priceId)
 }
 
-// stripe-config.ts
 export const verificationProduct = {
   id: 'verification-eur-1',
   priceId: 'price_xxx_1eur_verification', // <-- put your actual Stripe Price ID here
