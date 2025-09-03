@@ -3,90 +3,108 @@ import 'jsr:@supabase/functions-js/edge-runtime.d.ts'
 import Stripe from 'npm:stripe@17.7.0'
 
 /**
- * This function is purposely AUTH-LESS so users can verify BEFORE account creation.
- * It expects:
- *  - price_id: Stripe Price ID for the €1 verification
- *  - success_url: where to send the user after successful payment
- *  - cancel_url: where to send the user if they cancel
- *  - email: the email they plan to sign up with
- *  - user_type: 'job_seeker' | 'company' (optional but helpful metadata)
+ * Auth-less Stripe Checkout creator.
+ * Accepts:
+ *  - price_id:   REQUIRED (Stripe Price ID, not Product ID)
+ *  - success_url: REQUIRED
+ *  - cancel_url:  REQUIRED
+ *  - mode:       OPTIONAL ('payment' | 'subscription') default 'payment'
+ *  - category:   OPTIONAL ('verification' | 'plan' | ...)
+ *  - email:      REQUIRED when category === 'verification'
+ *  - user_type:  OPTIONAL ('job_seeker' | 'company')
+ *  - metadata:   OPTIONAL (Record<string, string|number|boolean>)
+ *
+ * For verification, we tag metadata.purpose='verification' and pass customer_email.
  */
 
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY')!, {
+  apiVersion: '2024-06-20',
   appInfo: { name: 'TalentBook', version: '1.0.0' },
 })
 
-function cors(body: any, status = 200) {
-  const headers = {
+function cors(body: unknown, status = 200) {
+  const headers: Record<string, string> = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': '*',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Max-Age': '86400',
   }
   if (status === 204) return new Response(null, { status, headers })
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...headers, 'Content-Type': 'application/json' },
-  })
+  return new Response(JSON.stringify(body), { status, headers: { ...headers, 'Content-Type': 'application/json' } })
 }
 
-type StartVerificationPayload = {
-  price_id: string
-  success_url: string
-  cancel_url: string
-  email: string
+type Payload = {
+  price_id?: string
+  success_url?: string
+  cancel_url?: string
+  mode?: 'payment' | 'subscription'
+  category?: string
+  email?: string
   user_type?: 'job_seeker' | 'company'
+  metadata?: Record<string, string | number | boolean>
 }
 
 Deno.serve(async (req) => {
+  // CORS preflight
+  if (req.method === 'OPTIONS') return cors({}, 204)
+  if (req.method !== 'POST') return cors({ error: 'Method not allowed' }, 405)
+
   try {
-    // CORS preflight
-    if (req.method === 'OPTIONS') return cors({}, 204)
-
-    if (req.method !== 'POST') {
-      return cors({ error: 'Method not allowed' }, 405)
+    let json: Payload | null = null
+    try {
+      json = (await req.json()) as Payload
+    } catch {
+      return cors({ error: 'Invalid JSON body' }, 400)
     }
 
-    const { price_id, success_url, cancel_url, email, user_type } =
-      (await req.json()) as StartVerificationPayload
-
-    // Basic validation
-    if (!price_id || typeof price_id !== 'string') {
-      return cors({ error: 'Missing or invalid price_id' }, 400)
-    }
-    if (!success_url || typeof success_url !== 'string') {
-      return cors({ error: 'Missing or invalid success_url' }, 400)
-    }
-    if (!cancel_url || typeof cancel_url !== 'string') {
-      return cors({ error: 'Missing or invalid cancel_url' }, 400)
-    }
-    if (!email || typeof email !== 'string') {
-      return cors({ error: 'Missing or invalid email' }, 400)
-    }
-
-    // Create a temporary Stripe customer – no Supabase user exists yet.
-    const customer = await stripe.customers.create({
+    const {
+      price_id,
+      success_url,
+      cancel_url,
+      mode = 'payment',
+      category,
       email,
-      metadata: {
-        purpose: 'verification',
-        pending_signup: 'true',
-        userType: user_type ?? '',
-      },
-    })
+      user_type,
+      metadata,
+    } = json ?? {}
 
-    // Create a payment-mode Checkout Session for the €1 verification
+    // --- Validation ---
+    if (!price_id || typeof price_id !== 'string') return cors({ error: 'Missing or invalid price_id' }, 400)
+    if (!success_url || typeof success_url !== 'string') return cors({ error: 'Missing or invalid success_url' }, 400)
+    if (!cancel_url || typeof cancel_url !== 'string') return cors({ error: 'Missing or invalid cancel_url' }, 400)
+    if (mode !== 'payment' && mode !== 'subscription') return cors({ error: 'Invalid mode' }, 400)
+
+    const isVerification = category === 'verification'
+    const normalizedEmail = (email || '').toLowerCase().trim()
+
+    if (isVerification && !normalizedEmail) {
+      return cors({ error: 'Email is required for verification checkout' }, 400)
+    }
+
+    // --- Build metadata (reserve keys won't be overwritten by caller) ---
+    const meta: Record<string, string | number | boolean> = {
+      ...(metadata ?? {}),
+      ...(isVerification
+        ? { purpose: 'verification', email: normalizedEmail, userType: user_type ?? '' }
+        : {}),
+    }
+
+    // --- Create Checkout Session ---
     const session = await stripe.checkout.sessions.create({
-      mode: 'payment',
-      customer: customer.id,
-      payment_method_types: ['card'],
+      mode,
       line_items: [{ price: price_id, quantity: 1 }],
       success_url,
       cancel_url,
-      metadata: {
-        purpose: 'verification',
-        email,
-        userType: user_type ?? '',
-      },
+      ...(isVerification ? { customer_email: normalizedEmail } : {}),
+      metadata: meta,
+      allow_promotion_codes: false,
+      billing_address_collection: 'auto',
+      // You can add: automatic_tax, shipping_address_collection, etc. if needed
     })
+
+    if (!session?.url) {
+      return cors({ error: 'Failed to create checkout session URL' }, 500)
+    }
 
     return cors({ sessionId: session.id, url: session.url })
   } catch (e: any) {
