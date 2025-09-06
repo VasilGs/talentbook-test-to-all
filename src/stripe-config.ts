@@ -224,18 +224,6 @@ export const getProductByPriceId = (priceId: string) => {
   return stripeProducts.find(product => product.priceId === priceId)
 }
 
-export const verificationProduct = {
-  id: 'verification-eur-1',
-  priceId: 'price_xxx_1eur_verification', // <-- put your actual Stripe Price ID here
-  name: 'Identity verification',
-  description: 'One-time €1 verification to help keep TalentBook safe & trusted.',
-  mode: 'payment' as const,            // IMPORTANT: one-time payment, not subscription
-  price: 100,                          // cents
-  currency: 'eur',
-  category: 'verification' as const,   // custom category (optional)
-};
-
-
 export const formatPrice = (price: number, currency: string = 'eur') => {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
