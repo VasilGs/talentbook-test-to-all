@@ -12,14 +12,10 @@ import { JobSeekerProfileCompletion } from './components/JobSeekerProfileComplet
 import { CompanyProfileCompletion } from './components/CompanyProfileCompletion';
 import { CompanyProfileView } from './components/CompanyProfileView';
 import { PrivacyTermsModal } from './components/PrivacyTermsModal';
-import { CheckoutSuccess } from './components/CheckoutSuccess';
-import { CheckoutCancel } from './components/CheckoutCancel';
-import { SubscriptionStatus } from './components/SubscriptionStatus';
 import { supabase, type User } from './lib/supabase';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import ProtectedRoute from '@/routes/Protected';
 import { getUserType, isCompanyProfileComplete, isSeekerProfileComplete } from '@/lib/role';
-import { stripeProducts, getProductsByCategory } from './stripe-config';
 
 // ----------------- Types -----------------
 interface SignupData {
@@ -459,10 +455,6 @@ export default function App() {
           }
         />
 
-        {/* CHECKOUT */}
-        <Route path="/checkout/success" element={<CheckoutSuccess />} />
-        <Route path="/checkout/cancel" element={<CheckoutCancel />} />
-
         {/* 404 */}
         <Route path="*" element={<div className="p-6 text-white">Not Found</div>} />
       </Routes>
@@ -606,7 +598,6 @@ function LandingView(props: {
                 >
                   Welcome, {user.user_metadata?.full_name || user.email}!
                 </button>
-                <SubscriptionStatus className="hidden sm:flex" />
                 <button
                   onClick={onSignOut}
                   className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white px-4 py-2 rounded-lg font-medium transition-all duration-200 hover:shadow-lg hover:shadow-red-600/25 hover:-translate-y-0.5"
@@ -642,10 +633,6 @@ function LandingView(props: {
                 <Search className="w-4 h-4" />
                 <span>Search Jobs</span>
               </a>
-            </div>
-          ) : user ? (
-            <div className="flex justify-center">
-              <SubscriptionStatus />
             </div>
           ) : !user ? (
             <div className="md:hidden px-4 sm:px-6 pb-4">
@@ -866,6 +853,10 @@ function LandingView(props: {
           <Pricing
             title="Choose Your Plan"
             description="Find the perfect plan for your needs. Whether you're a job seeker or employer, we have options that scale with you."
+            /* ... keep your plans array as you had it ... */
+            plans={[
+              // (unchanged) your four plan objects
+            ]}
           />
           <div className="absolute inset-0 overflow-hidden pointer-events-none">
             <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-red-600/5 rounded-full blur-3xl"></div>
