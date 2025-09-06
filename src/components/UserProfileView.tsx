@@ -16,7 +16,9 @@ import {
   Clock,
   Loader2,
   ExternalLink,
-  Download
+  Download,
+  Shield,
+  Zap
 } from 'lucide-react'
 import { DeleteConfirmationModal } from './DeleteConfirmationModal'
 import { UserProfileEditModal } from './UserProfileEditModal'
