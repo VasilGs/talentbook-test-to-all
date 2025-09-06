@@ -6,11 +6,6 @@ import { Button } from './ui/button'
 export function CheckoutCancel() {
   const navigate = useNavigate()
 
-  // Clear any pending signup data when user cancels
-  React.useEffect(() => {
-    sessionStorage.removeItem('pendingSignupData')
-  }, [])
-
   const handleGoBack = () => {
     navigate(-1) // Go back to previous page
   }
