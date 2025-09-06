@@ -232,7 +232,8 @@ export function Pricing({
             </ul>
 
             <hr className="w-full my-6 border-white/20" />
-                delay: 0.4 + (index * 0.1),
+
+            <Button
               onClick={user ? undefined : openSignup}
               disabled={!!user}
               className={cn(
@@ -241,7 +242,7 @@ export function Pricing({
                 }),
                 "group relative w-full gap-2 overflow-hidden text-lg font-semibold tracking-tighter",
                 "transform-gpu ring-offset-current transition-all duration-300 ease-out",
-                (paidSubscriptionPlans.length === 2 && (index === 0 || index === 1)) || (paidSubscriptionPlans.length === 3 && (index === 0 || index === 2))
+                user 
                   ? "bg-gray-600 text-gray-300 border-gray-600 cursor-not-allowed"
                   : "bg-transparent text-white border-white/30 hover:bg-[#FFC107] hover:text-black hover:border-[#FFC107] hover:ring-2 hover:ring-[#FFC107] hover:ring-offset-1"
               )}
@@ -262,7 +263,7 @@ export function Pricing({
             whileInView={
               isDesktop
                 ? {
-                    y: plan.isPopular ? -20 : 0,
+                    y: plan.popular ? -20 : 0,
                     opacity: 1,
                     x: paidSubscriptionPlans.length === 2 ? (index === 1 ? -30 : 30) : paidSubscriptionPlans.length === 3 ? (index === 2 ? -30 : index === 0 ? 30 : 0) : 0,
                     scale: (paidSubscriptionPlans.length === 2 && (index === 0 || index === 1)) || (paidSubscriptionPlans.length === 3 && (index === 0 || index === 2)) ? 0.94 : 1.0,
@@ -275,7 +276,7 @@ export function Pricing({
               type: "spring",
               stiffness: 100,
               damping: 30,
-              delay: 0.4,
+              delay: 0.4 + (index * 0.1),
               opacity: { duration: 0.5 },
             }}
             className={cn(
@@ -283,7 +284,7 @@ export function Pricing({
               plan.popular ? "border-[#FFC107] border-2" : "border-white/20",
               "flex flex-col",
               !plan.popular && "mt-5",
-              subscriptionPlans.length === 3 && (index === 0 || index === 2)
+              (paidSubscriptionPlans.length === 2 && (index === 0 || index === 1)) || (paidSubscriptionPlans.length === 3 && (index === 0 || index === 2))
                 ? "z-0 transform translate-x-0 translate-y-0"
                 : "z-10",
             )}
