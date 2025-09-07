@@ -1,19 +1,27 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Users, Briefcase, Star, Loader2, X, Check } from 'lucide-react';
-import { AnimatePresence } from 'motion/react';
-import { JobCandidateAnimation } from './components/job-candidate-animation';
-import { Pricing } from './components/ui/pricing';
-import { SignupModal } from './components/signup-modal';
-import { LoginModal } from './components/login-modal';
-import { UserProfileView } from './components/UserProfileView';
-import { JobCard } from './components/JobCard';
-import { JobDetailsModal } from './components/JobDetailsModal';
-import { JobSeekerProfileCompletion } from './components/JobSeekerProfileCompletion';
-import { CompanyProfileCompletion } from './components/CompanyProfileCompletion';
-import { CompanyProfileView } from './components/CompanyProfileView';
-import { PrivacyTermsModal } from './components/PrivacyTermsModal';
-import { supabase, type User } from './lib/supabase';
+import React, { useState, useEffect, useRef } from 'react'
+import { Search, Users, Briefcase, Star, Loader2, X, Check } from 'lucide-react'
+import { AnimatePresence } from 'motion/react'
+import { JobCandidateAnimation } from './components/job-candidate-animation'
+import { Pricing } from './components/ui/pricing'
+import { SignupModal } from './components/signup-modal'
+import { LoginModal } from './components/login-modal'
+import { UserProfileView } from './components/UserProfileView'
+import { JobCard } from './components/JobCard'
+import { JobDetailsModal } from './components/JobDetailsModal'
+import { JobSeekerProfileCompletion } from './components/JobSeekerProfileCompletion'
+import { CompanyProfileCompletion } from './components/CompanyProfileCompletion'
+import { CompanyProfileView } from './components/CompanyProfileView'
+import { PrivacyTermsModal } from './components/PrivacyTermsModal'
+import { CheckoutSuccess } from './components/CheckoutSuccess'
+import { CheckoutCancel } from './components/CheckoutCancel'
+import { CheckoutVerifySuccess } from './components/CheckoutVerifySuccess'
+import { SubscriptionStatus } from './components/SubscriptionStatus'
+import { supabase, type User } from './lib/supabase'
+import { Routes, Route, useNavigate } from 'react-router-dom'
+import ProtectedRoute from '@/routes/Protected'
+import { getUserType, isCompanyProfileComplete, isSeekerProfileComplete } from '@/lib/role'
 
+// ----------------- Types -----------------
 interface SignupData {
   name: string
   email: string
@@ -21,7 +29,6 @@ interface SignupData {
   userType: 'job_seeker' | 'company'
 }
 
-// Company interface matching Supabase table structure
 interface CompanyData {
   id: string
   company_name: string
@@ -41,153 +48,171 @@ interface CompanyData {
   updated_at: string
 }
 
-// Job interface matching Supabase table structure
 interface Job {
-  id: string;
-  company_name: string;
-  company_logo: string | null;
-  position: string;
-  location: string;
-  salary: string | null;
-  job_type: string | null;
-  experience_level: string | null;
-  short_description: string | null;
-  requirements: string | null;
-  skills: string[] | null;
-  application_link: string | null;
-  is_remote: boolean | null;
-  status: string | null;
-  created_at: string;
+  id: string
+  company_name: string
+  company_logo: string | null
+  position: string
+  location: string
+  salary: string | null
+  job_type: string | null
+  experience_level: string | null
+  short_description: string | null
+  requirements: string | null
+  skills: string[] | null
+  application_link: string | null
+  is_remote: boolean | null
+  status: string | null
+  created_at: string
 }
 
+// ----------------- App -----------------
 export default function App() {
-  const [placeholderText, setPlaceholderText] = useState('');
-  const [currentTextIndex, setCurrentTextIndex] = useState(0);
-  const [charIndex, setCharIndex] = useState(0);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [showCursor, setShowCursor] = useState(true);
-  const [isSignupModalOpen, setIsSignupModalOpen] = useState(false);
-  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
-  const [tempSignupData, setTempSignupData] = useState<SignupData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState<'home' | 'search-jobs' | 'complete-profile' | 'user-profile'>('home');
-  const [userProfileComplete, setUserProfileComplete] = useState(false);
-  const [companyData, setCompanyData] = useState<CompanyData | null>(null);
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [jobsLoading, setJobsLoading] = useState(false);
-  const [currentJobIndex, setCurrentJobIndex] = useState(0);
-  const [exitDirection, setExitDirection] = useState<'left' | 'right' | null>(null);
-  const [isJobDetailsModalOpen, setIsJobDetailsModalOpen] = useState(false);
-  const [selectedJob, setSelectedJob] = useState<Job | null>(null);
-  const [isPrivacyTermsModalOpen, setIsPrivacyTermsModalOpen] = useState(false);
+  // UI typing effect
+  const [placeholderText, setPlaceholderText] = useState('')
+  const [currentTextIndex, setCurrentTextIndex] = useState(0)
+  const [charIndex, setCharIndex] = useState(0)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [showCursor, setShowCursor] = useState(true)
 
-  const texts = [
-    "What job are you looking for?",
-    "Who are you looking to hire?"
-  ];
+  // Auth & global state
+  const [isSignupModalOpen, setIsSignupModalOpen] = useState(false)
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
+  const [user, setUser] = useState<import('@supabase/supabase-js').User | null>(null)
+  const [tempSignupData, setTempSignupData] = useState<SignupData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const navigate = useNavigate()
+  const routed = useRef(false)
 
+  // Legacy local "pages" inside the landing view
+  const [currentPage, setCurrentPage] = useState<'home' | 'search-jobs' | 'complete-profile' | 'user-profile'>('home')
+
+  // Profile state
+  const [userProfileComplete, setUserProfileComplete] = useState(false)
+  const [companyData, setCompanyData] = useState<CompanyData | null>(null)
+
+  // Jobs state
+  const [jobs, setJobs] = useState<Job[]>([])
+  const [jobsLoading, setJobsLoading] = useState(false)
+  const [currentJobIndex, setCurrentJobIndex] = useState(0)
+  const [exitDirection, setExitDirection] = useState<'left' | 'right' | null>(null)
+  const [isJobDetailsModalOpen, setIsJobDetailsModalOpen] = useState(false)
+  const [selectedJob, setSelectedJob] = useState<Job | null>(null)
+
+  const [isPrivacyTermsModalOpen, setIsPrivacyTermsModalOpen] = useState(false)
+
+  const texts = ['What job are you looking for?', 'Who are you looking to hire?']
+
+  // ----------------- Effects -----------------
+  // Typing effect
   useEffect(() => {
-    const currentText = texts[currentTextIndex];
-    const typingSpeed = isDeleting ? 50 : 100;
+    const currentText = texts[currentTextIndex]
+    const typingSpeed = isDeleting ? 50 : 100
 
     const timer = setTimeout(() => {
       if (!isDeleting) {
         if (charIndex < currentText.length) {
-          setPlaceholderText(currentText.substring(0, charIndex + 1));
-          setCharIndex(charIndex + 1);
+          setPlaceholderText(currentText.substring(0, charIndex + 1))
+          setCharIndex((i) => i + 1)
         } else {
-          setTimeout(() => setIsDeleting(true), 2000);
+          setTimeout(() => setIsDeleting(true), 2000)
         }
       } else {
         if (charIndex > 0) {
-          setPlaceholderText(currentText.substring(0, charIndex - 1));
-          setCharIndex(charIndex - 1);
+          setPlaceholderText(currentText.substring(0, charIndex - 1))
+          setCharIndex((i) => i - 1)
         } else {
-          setIsDeleting(false);
-          setCurrentTextIndex((currentTextIndex + 1) % texts.length);
+          setIsDeleting(false)
+          setCurrentTextIndex((idx) => (idx + 1) % texts.length)
         }
       }
-    }, typingSpeed);
+    }, typingSpeed)
 
-    return () => clearTimeout(timer);
-  }, [charIndex, isDeleting, currentTextIndex, texts]);
+    return () => clearTimeout(timer)
+  }, [charIndex, isDeleting, currentTextIndex, texts])
 
+  // Cursor blink
   useEffect(() => {
-    const cursorTimer = setInterval(() => {
-      setShowCursor(prev => !prev);
-    }, 500);
+    const cursorTimer = setInterval(() => setShowCursor((p) => !p), 500)
+    return () => clearInterval(cursorTimer)
+  }, [])
 
-    return () => clearInterval(cursorTimer);
-  }, []);
-
-  // Handle authentication state changes
+  // Auth lifecycle + route-by-role
   useEffect(() => {
     const startTime = Date.now()
-    const minLoadingTime = 2500 // 2.5 seconds minimum loading time
-    
-    // Get initial session
+    const minLoadingTime = 2500 // 2.5s splash
+
     supabase.auth.getSession().then(({ data: { session } }) => {
-      const elapsedTime = Date.now() - startTime
-      const remainingTime = Math.max(0, minLoadingTime - elapsedTime)
-      
-      setTimeout(() => {
-        setUser(session?.user ?? null)
-        if (session?.user) {
-          checkUserProfileCompletion(session.user)
+      const elapsed = Date.now() - startTime
+      const remaining = Math.max(0, minLoadingTime - elapsed)
+
+      setTimeout(async () => {
+        const u = session?.user ?? null
+        setUser(u)
+
+        if (u) {
+          await checkUserProfileCompletion(u)
+          // initial role route once
+          if (!routed.current) {
+            routed.current = true
+            routeByRole(u.id)
+          }
         } else {
-          // Clear temp signup data when user logs out
           setTempSignupData(null)
         }
         setLoading(false)
-      }, remainingTime)
+      }, remaining)
     })
 
-    // Listen for auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      // Show loading screen for auth state changes (login/logout)
       if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
         setLoading(true)
-        const authChangeStartTime = Date.now()
-        
-        setTimeout(() => {
-          setUser(session?.user ?? null)
-          if (event === 'SIGNED_IN' && session?.user) {
-            checkUserProfileCompletion(session.user)
-            // Clear temp signup data when user successfully logs in
+        const minLoadingTime = 2500
+        setTimeout(async () => {
+          const u = session?.user ?? null
+          setUser(u)
+
+          if (event === 'SIGNED_IN' && u) {
+            await checkUserProfileCompletion(u)
             setTempSignupData(null)
+            setIsSignupModalOpen(false)
+            setIsLoginModalOpen(false)
+            // route once on sign-in
+            routed.current = true
+            routeByRole(u.id)
           } else if (event === 'SIGNED_OUT') {
             setUserProfileComplete(false)
             setCurrentPage('home')
             setTempSignupData(null)
             setCompanyData(null)
+            routed.current = false
+            navigate('/', { replace: true })
           }
           setLoading(false)
-          
-          // Close modals when user logs in
-          if (session?.user) {
-            setIsSignupModalOpen(false)
-            setIsLoginModalOpen(false)
-          }
         }, minLoadingTime)
       } else {
-        // For other events, update immediately
-        setUser(session?.user ?? null)
-        if (session?.user) {
-          checkUserProfileCompletion(session.user)
-        }
+        const u = session?.user ?? null
+        setUser(u)
+        if (u) await checkUserProfileCompletion(u)
       }
     })
-      
-    return () => subscription.unsubscribe()
-  }, [])
 
-  // Check if user profile is complete
+    return () => subscription.unsubscribe()
+  }, [navigate])
+
+  // Fetch jobs when user goes to the local "search-jobs" page inside Landing
+  useEffect(() => {
+    if (user && currentPage === 'search-jobs') {
+      fetchJobs()
+    }
+  }, [user, currentPage])
+
+  // ----------------- Helpers -----------------
   const checkUserProfileCompletion = async (user: User) => {
     const userType = user.user_metadata?.user_type
-    
+
     if (userType === 'job_seeker') {
       try {
         const { data: profile, error } = await supabase
@@ -196,16 +221,13 @@ export default function App() {
           .eq('id', user.id)
           .maybeSingle()
 
-        // Check if profile exists (regardless of completeness)
         if (error || !profile) {
           setUserProfileComplete(false)
           return
         }
-
-        // Profile exists, mark as complete
         setUserProfileComplete(true)
-      } catch (error) {
-        console.error('Error checking profile completion:', error)
+      } catch (e) {
+        console.error('Error checking profile completion:', e)
         setUserProfileComplete(false)
       }
     } else if (userType === 'company') {
@@ -216,7 +238,6 @@ export default function App() {
           .eq('user_id', user.id)
           .maybeSingle()
 
-        // Check if company profile exists (regardless of completeness)
         if (error || !company) {
           setUserProfileComplete(false)
           setCompanyData(null)
@@ -224,8 +245,8 @@ export default function App() {
           setUserProfileComplete(true)
           setCompanyData(company)
         }
-      } catch (error) {
-        console.error('Error checking company profile completion:', error)
+      } catch (e) {
+        console.error('Error checking company profile completion:', e)
         setUserProfileComplete(false)
         setCompanyData(null)
       }
@@ -238,7 +259,6 @@ export default function App() {
   }
 
   const handleCompanyProfileUpdate = () => {
-    // Re-fetch company data after update
     if (user) checkUserProfileCompletion(user)
   }
 
@@ -248,7 +268,6 @@ export default function App() {
     setCurrentPage('complete-profile')
   }
 
-  // Fetch jobs from Supabase
   const fetchJobs = async () => {
     setJobsLoading(true)
     try {
@@ -263,107 +282,96 @@ export default function App() {
       } else {
         setJobs(data || [])
       }
-    } catch (error) {
-      console.error('Error fetching jobs:', error)
+    } catch (e) {
+      console.error('Error fetching jobs:', e)
     } finally {
       setJobsLoading(false)
     }
   }
 
-  // Fetch jobs when user logs in and navigates to search page
-  useEffect(() => {
-    if (user && currentPage === 'search-jobs') {
-      fetchJobs()
+  async function routeByRole(userId: string) {
+    const type = await getUserType(userId)
+    if (type === 'company') {
+      if (await isCompanyProfileComplete(userId)) {
+        navigate('/company/profile', { replace: true })
+      } else {
+        navigate('/company/complete', { replace: true })
+      }
+      return
     }
-  }, [user, currentPage])
+    if (type === 'job_seeker') {
+      if (await isSeekerProfileComplete(userId)) {
+        navigate('/seeker/profile', { replace: true })
+      } else {
+        navigate('/seeker/complete', { replace: true })
+      }
+      return
+    }
+    navigate('/', { replace: true })
+  }
 
+  // Header / UI handlers used by the Landing view
   const handleSignOut = async () => {
     try {
       await supabase.auth.signOut()
-    } catch (error) {
-      // Handle logout errors gracefully - the local session will still be cleared
-      console.warn('Logout error (local session cleared):', error)
+    } catch (e) {
+      console.warn('Logout error (local session cleared):', e)
     }
   }
 
   const handleSearchJobsClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setCurrentJobIndex(0); // Reset to first job when navigating to search
-    setCurrentPage('search-jobs');
-  };
+    e.preventDefault()
+    setCurrentJobIndex(0)
+    setCurrentPage('search-jobs')
+  }
 
   const handleLogoClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setCurrentPage('home');
-  };
+    e.preventDefault()
+    navigate('/')
+  }
 
   const handleUserNameClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setCurrentPage('user-profile');
-  };
-
-  const handleSwipe = (direction: 'left' | 'right') => {
-    console.log(`Swiped ${direction} on job:`, jobs[currentJobIndex]);
-    
-    // Move to next job
-    if (currentJobIndex < jobs.length - 1) {
-      setCurrentJobIndex(currentJobIndex + 1);
-    } else {
-      // Reset to first job when all jobs are swiped
-      setCurrentJobIndex(0);
-    }
-    
-    // Reset exit direction after swipe
-    setTimeout(() => {
-      setExitDirection(null);
-    }, 100);
-  };
+    e.preventDefault()
+    setCurrentPage('user-profile')
+  }
 
   const handleActionButton = (action: 'reject' | 'approve') => {
-    setExitDirection(action === 'reject' ? 'left' : 'right');
-    
-    // Add haptic feedback if available
-    if (navigator.vibrate) {
-      navigator.vibrate(50); // Light haptic feedback
-    }
-    
-    // Trigger the swipe with a slight delay to ensure exitDirection is set
+    setExitDirection(action === 'reject' ? 'left' : 'right')
+    if (navigator.vibrate) navigator.vibrate(50)
     setTimeout(() => {
-      handleSwipe(action === 'reject' ? 'left' : 'right');
-    }, 10);
-  };
+      // simple index advance
+      if (jobs.length) {
+        setCurrentJobIndex((i) => (i + 1) % jobs.length)
+      }
+      setExitDirection(null)
+    }, 120)
+  }
 
   const handleJobCardClick = (job: Job) => {
-    setSelectedJob(job);
-    setIsJobDetailsModalOpen(true);
-  };
+    setSelectedJob(job)
+    setIsJobDetailsModalOpen(true)
+  }
 
+  // ----------------- Loading Screen -----------------
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900 flex items-center justify-center">
         <div className="text-center">
-          {/* Logo */}
           <div className="mb-8">
-            <img 
-              src="/talent_book_logo_draft_3 copy copy.png" 
-              alt="TalentBook Logo" 
+            <img
+              src="/talent_book_logo_draft_3 copy copy.png"
+              alt="TalentBook Logo"
               className="h-16 w-auto mx-auto object-contain"
             />
           </div>
-          
-          {/* Loading Spinner */}
           <div className="flex items-center justify-center space-x-3 mb-4">
             <Loader2 className="w-6 h-6 text-[#FFC107] animate-spin" />
             <span className="text-white text-lg font-medium">Loading TalentBook...</span>
           </div>
-          
-          {/* Loading Bar */}
           <div className="w-64 h-1 bg-white/20 rounded-full overflow-hidden mx-auto">
             <div className="h-full bg-gradient-to-r from-red-600 to-[#FFC107] rounded-full animate-pulse"></div>
           </div>
         </div>
-        
-        {/* Background Elements */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-red-600/5 rounded-full blur-3xl animate-pulse-slow"></div>
           <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-[#FFC107]/5 rounded-full blur-3xl animate-pulse-slow"></div>
@@ -372,18 +380,183 @@ export default function App() {
     )
   }
 
+  // ----------------- Single return with Routes -----------------
+  return (
+    <>
+      <Routes>
+        {/* Landing / marketing */}
+        <Route
+          path="/"
+          element={
+            <LandingView
+              // state
+              user={user}
+              tempSignupData={tempSignupData}
+              currentPage={currentPage}
+              userProfileComplete={userProfileComplete}
+              companyData={companyData}
+              jobs={jobs}
+              jobsLoading={jobsLoading}
+              currentJobIndex={currentJobIndex}
+              exitDirection={exitDirection}
+              placeholderText={placeholderText}
+              showCursor={showCursor}
+              // handlers
+              onLogoClick={handleLogoClick}
+              onSearchJobsClick={handleSearchJobsClick}
+              onUserNameClick={handleUserNameClick}
+              onSignOut={handleSignOut}
+              onFetchJobs={fetchJobs}
+              onActionButton={handleActionButton}
+              onJobCardClick={handleJobCardClick}
+              onCompanyUpdated={handleCompanyProfileUpdate}
+              onProfileComplete={handleProfileComplete}
+              // modal toggles
+              openLogin={() => setIsLoginModalOpen(true)}
+              openSignup={() => setIsSignupModalOpen(true)}
+              openPrivacy={() => setIsPrivacyTermsModalOpen(true)}
+            />
+          }
+        />
+
+        {/* COMPANY */}
+        <Route
+          path="/company/profile"
+          element={
+            <ProtectedRoute>
+              <CompanyProfileView />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/company/complete"
+          element={
+            <ProtectedRoute>
+              <CompanyProfileCompletion />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* SEEKER */}
+        <Route
+          path="/seeker/profile"
+          element={
+            <ProtectedRoute>
+              <UserProfileView />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/seeker/complete"
+          element={
+            <ProtectedRoute>
+              <JobSeekerProfileCompletion />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* CHECKOUT */}
+        <Route path="/checkout/success" element={<CheckoutSuccess />} />
+        <Route path="/checkout/cancel" element={<CheckoutCancel />} />
+        <Route path="/checkout/verify-success" element={<CheckoutVerifySuccess />} />
+
+        {/* 404 */}
+        <Route path="*" element={<div className="p-6 text-white">Not Found</div>} />
+      </Routes>
+
+      {/* Global modals */}
+      <SignupModal
+        isOpen={isSignupModalOpen}
+        onClose={() => setIsSignupModalOpen(false)}
+        onSwitchToLogin={() => setIsLoginModalOpen(true)}
+        onContinueSignup={handleContinueSignup}
+        onOpenPrivacyTerms={() => setIsPrivacyTermsModalOpen(true)}
+      />
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        onSwitchToSignup={() => setIsSignupModalOpen(true)}
+      />
+      <JobDetailsModal
+        isOpen={isJobDetailsModalOpen}
+        onClose={() => setIsJobDetailsModalOpen(false)}
+        job={selectedJob}
+        userId={user?.id || null}
+      />
+      <PrivacyTermsModal
+        isOpen={isPrivacyTermsModalOpen}
+        onClose={() => setIsPrivacyTermsModalOpen(false)}
+      />
+    </>
+  )
+}
+
+// ----------------- LandingView -----------------
+function LandingView(props: {
+  // state
+  user: import('@supabase/supabase-js').User | null
+  tempSignupData: SignupData | null
+  currentPage: 'home' | 'search-jobs' | 'complete-profile' | 'user-profile'
+  userProfileComplete: boolean
+  companyData: CompanyData | null
+  jobs: Job[]
+  jobsLoading: boolean
+  currentJobIndex: number
+  exitDirection: 'left' | 'right' | null
+  placeholderText: string
+  showCursor: boolean
+  // handlers
+  onLogoClick: (e: React.MouseEvent) => void
+  onSearchJobsClick: (e: React.MouseEvent) => void
+  onUserNameClick: (e: React.MouseEvent) => void
+  onSignOut: () => Promise<void>
+  onFetchJobs: () => Promise<void>
+  onActionButton: (action: 'reject' | 'approve') => void
+  onJobCardClick: (job: Job) => void
+  onCompanyUpdated: () => void
+  onProfileComplete: () => void
+  // modal toggles
+  openLogin: () => void
+  openSignup: () => void
+  openPrivacy: () => void
+}) {
+  const {
+    user,
+    tempSignupData,
+    currentPage,
+    userProfileComplete,
+    companyData,
+    jobs,
+    jobsLoading,
+    currentJobIndex,
+    exitDirection,
+    placeholderText,
+    showCursor,
+    onLogoClick,
+    onSearchJobsClick,
+    onUserNameClick,
+    onSignOut,
+    onFetchJobs,
+    onActionButton,
+    onJobCardClick,
+    onCompanyUpdated,
+    onProfileComplete,
+    openLogin,
+    openSignup,
+    openPrivacy,
+  } = props
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900">
       {/* Navigation Header */}
       <header className="relative z-10">
         <nav className="flex items-center justify-between px-4 sm:px-6 lg:px-8 py-6">
-          {/* Logo */}
           <div className="flex items-center">
             <div className="flex items-center space-x-3">
-              <button onClick={handleLogoClick} className="focus:outline-none">
-                <img 
-                  src="/talent_book_logo_draft_3 copy copy.png" 
-                  alt="TalentBook Logo" 
+              <button onClick={onLogoClick} className="focus:outline-none">
+                <img
+                  src="/talent_book_logo_draft_3 copy copy.png"
+                  alt="TalentBook Logo"
                   className="h-12 w-auto object-contain hover:opacity-80 transition-opacity duration-200"
                 />
               </button>
@@ -392,10 +565,10 @@ export default function App() {
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-8">
-            {user && (
-              <a 
+            {user && user.user_metadata?.user_type === 'job_seeker' && (
+              <a
                 href="#search-jobs"
-                onClick={handleSearchJobsClick}
+                onClick={onSearchJobsClick}
                 className="text-gray-300 hover:text-white transition-colors duration-200 font-medium flex items-center space-x-2 hover:bg-white/10 px-4 py-2 rounded-lg"
               >
                 <Search className="w-4 h-4" />
@@ -421,14 +594,12 @@ export default function App() {
           <div className="flex items-center space-x-4">
             {user ? (
               <div className="flex items-center space-x-4">
-                <button 
-                  onClick={handleUserNameClick}
-                  className="text-gray-300 hover:text-white transition-colors duration-200 cursor-pointer"
-                >
+                <button onClick={onUserNameClick} className="text-gray-300 hover:text-white transition-colors duration-200 cursor-pointer">
                   Welcome, {user.user_metadata?.full_name || user.email}!
                 </button>
-                <button 
-                  onClick={handleSignOut}
+                <SubscriptionStatus className="hidden sm:flex" />
+                <button
+                  onClick={onSignOut}
                   className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white px-4 py-2 rounded-lg font-medium transition-all duration-200 hover:shadow-lg hover:shadow-red-600/25 hover:-translate-y-0.5"
                 >
                   Sign Out
@@ -436,14 +607,11 @@ export default function App() {
               </div>
             ) : (
               <>
-                <button 
-                  onClick={() => setIsLoginModalOpen(true)}
-                  className="text-gray-300 hover:text-white transition-colors duration-200 font-medium"
-                >
+                <button onClick={openLogin} className="text-gray-300 hover:text-white transition-colors duration-200 font-medium">
                   Log In
                 </button>
-                <button 
-                  onClick={() => setIsSignupModalOpen(true)}
+                <button
+                  onClick={openSignup}
                   className="bg-[#FFC107] hover:bg-[#FFB300] text-black px-6 py-2.5 rounded-lg font-medium transition-all duration-200 hover:shadow-lg hover:shadow-[#FFC107]/25"
                 >
                   Sign Up For Free
@@ -455,66 +623,60 @@ export default function App() {
 
         {/* Mobile Navigation */}
         <div className="md:hidden px-4 sm:px-6 pb-4">
-          {user ? (
+          {user && user.user_metadata?.user_type === 'job_seeker' ? (
             <div className="flex items-center justify-center">
-              <a 
+              <a
                 href="#search-jobs"
-                onClick={handleSearchJobsClick}
+                onClick={onSearchJobsClick}
                 className="text-gray-300 hover:text-white transition-colors duration-200 font-medium flex items-center space-x-2 hover:bg-white/10 px-4 py-2 rounded-lg"
               >
                 <Search className="w-4 h-4" />
                 <span>Search Jobs</span>
               </a>
             </div>
-          ) : (
-          <div className="md:hidden px-4 sm:px-6 pb-4">
-            <div className="flex items-center justify-center space-x-6">
-              <a href="#about" className="text-gray-300 hover:text-white transition-colors duration-200 text-sm font-medium scroll-smooth">
-                About us
-              </a>
-              <a href="#pricing" className="text-gray-300 hover:text-white transition-colors duration-200 text-sm font-medium scroll-smooth">
-                Pricing
-              </a>
-              <a href="#contact" className="text-gray-300 hover:text-white transition-colors duration-200 text-sm font-medium scroll-smooth">
-                Contact us
-              </a>
+          ) : user ? (
+            <div className="flex justify-center">
+              <SubscriptionStatus />
             </div>
-          </div>
+          ) : (
+            <div className="md:hidden px-4 sm:px-6 pb-4">
+              <div className="flex items-center justify-center space-x-6">
+                <a href="#about" className="text-gray-300 hover:text-white transition-colors duration-200 text-sm font-medium scroll-smooth">
+                  About us
+                </a>
+                <a href="#pricing" className="text-gray-300 hover:text-white transition-colors duration-200 text-sm font-medium scroll-smooth">
+                  Pricing
+                </a>
+                <a href="#contact" className="text-gray-300 hover:text-white transition-colors duration-200 text-sm font-medium scroll-smooth">
+                  Contact us
+                </a>
+              </div>
+            </div>
           )}
         </div>
       </header>
 
-      {/* User Profile View - When logged in */}
+      {/* User Profile View */}
       {user && userProfileComplete && currentPage === 'user-profile' && (
         <>
-          {user.user_metadata?.user_type === 'job_seeker' && <UserProfileView onSignOut={handleSignOut} />}
+          {user.user_metadata?.user_type === 'job_seeker' && <UserProfileView onSignOut={onSignOut} />}
           {user.user_metadata?.user_type === 'company' && companyData && (
-            <CompanyProfileView 
-              company={companyData} 
-              onUpdateSuccess={handleCompanyProfileUpdate} 
-              onSignOut={handleSignOut}
-            />
+            <CompanyProfileView company={companyData} onUpdateSuccess={onCompanyUpdated} onSignOut={onSignOut} />
           )}
         </>
       )}
 
-      {/* Job Seeker Profile Completion - When logged in as job seeker with incomplete profile */}
+      {/* Job Seeker Profile Completion */}
       {tempSignupData && tempSignupData.userType === 'job_seeker' && (
-        <JobSeekerProfileCompletion 
-          signupData={tempSignupData}
-          onProfileComplete={handleProfileComplete}
-        />
+        <JobSeekerProfileCompletion signupData={tempSignupData} onProfileComplete={onProfileComplete} />
       )}
 
-      {/* Company Profile Completion - When signed up as company */}
+      {/* Company Profile Completion */}
       {tempSignupData && tempSignupData.userType === 'company' && (
-        <CompanyProfileCompletion 
-          signupData={tempSignupData}
-          onProfileComplete={handleProfileComplete}
-        />
+        <CompanyProfileCompletion signupData={tempSignupData} onProfileComplete={onProfileComplete} />
       )}
 
-      {/* Job Search Page - When logged in and on search page */}
+      {/* Job Search Page */}
       {user && userProfileComplete && currentPage === 'search-jobs' && (
         <div className="min-h-screen bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900 py-8 px-4">
           <div className="max-w-md mx-auto">
@@ -545,16 +707,9 @@ export default function App() {
                 ) : jobs.length === 0 ? (
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center">
-                      <h3 className="text-2xl font-bold text-white mb-4">
-                        No jobs available
-                      </h3>
-                      <p className="text-gray-300 mb-6">
-                        Check back later for new opportunities.
-                      </p>
-                      <button
-                        onClick={fetchJobs}
-                        className="bg-[#FFC107] hover:bg-[#FFB300] text-black px-6 py-3 rounded-lg font-semibold transition-all duration-200"
-                      >
+                      <h3 className="text-2xl font-bold text-white mb-4">No jobs available</h3>
+                      <p className="text-gray-300 mb-6">Check back later for new opportunities.</p>
+                      <button onClick={onFetchJobs} className="bg-[#FFC107] hover:bg-[#FFB300] text-black px-6 py-3 rounded-lg font-semibold transition-all duration-200">
                         Refresh
                       </button>
                     </div>
@@ -568,21 +723,17 @@ export default function App() {
                       position: jobs[currentJobIndex].position,
                       location: jobs[currentJobIndex].location,
                       salary: jobs[currentJobIndex].salary || 'Salary not specified',
-                      logo: jobs[currentJobIndex].company_logo || ''
+                      logo: jobs[currentJobIndex].company_logo || '',
                     }}
-                    onSwipe={handleSwipe}
-                    onCardClick={() => handleJobCardClick(jobs[currentJobIndex])}
+                    onSwipe={() => {}}
+                    onCardClick={() => onJobCardClick(jobs[currentJobIndex])}
                     exitDirection={exitDirection}
                   />
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center">
-                      <h3 className="text-2xl font-bold text-white mb-4">
-                        No more jobs!
-                      </h3>
-                      <p className="text-gray-300 mb-6">
-                        You've seen all available positions.
-                      </p>
+                      <h3 className="text-2xl font-bold text-white mb-4">No more jobs!</h3>
+                      <p className="text-gray-300 mb-6">You've seen all available positions.</p>
                       <button
                         onClick={() => setCurrentJobIndex(0)}
                         className="bg-[#FFC107] hover:bg-[#FFB300] text-black px-6 py-3 rounded-lg font-semibold transition-all duration-200"
@@ -598,17 +749,17 @@ export default function App() {
             {/* Action Buttons */}
             {!jobsLoading && jobs.length > 0 && currentJobIndex < jobs.length && (
               <div className="flex justify-center space-x-12 mt-2">
-                {/* Reject Button */}
+                {/* Reject */}
                 <button
-                  onClick={() => handleActionButton('reject')}
+                  onClick={() => onActionButton('reject')}
                   className="w-16 h-16 bg-gradient-to-br from-red-500/20 to-red-600/20 backdrop-blur-sm border-2 border-red-500/40 rounded-full flex items-center justify-center hover:bg-gradient-to-br hover:from-red-500/40 hover:to-red-600/40 hover:border-red-500/70 hover:scale-110 transition-all duration-300 group shadow-lg shadow-red-500/20"
                 >
                   <X className="w-8 h-8 text-red-400 group-hover:text-red-300 transition-colors duration-200" />
                 </button>
 
-                {/* Approve Button */}
+                {/* Approve */}
                 <button
-                  onClick={() => handleActionButton('approve')}
+                  onClick={() => onActionButton('approve')}
                   className="w-16 h-16 bg-gradient-to-br from-green-500/20 to-green-600/20 backdrop-blur-sm border-2 border-green-500/40 rounded-full flex items-center justify-center hover:bg-gradient-to-br hover:from-green-500/40 hover:to-green-600/40 hover:border-green-500/70 hover:scale-110 active:scale-95 transition-all duration-300 group shadow-lg shadow-green-500/20 focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-opacity-50"
                   aria-label="Approve job"
                   disabled={currentJobIndex >= jobs.length}
@@ -620,6 +771,7 @@ export default function App() {
           </div>
         </div>
       )}
+
       {/* Hero Section */}
       {!user && !tempSignupData && currentPage === 'home' && (
         <main className="relative z-10 px-4 sm:px-6 lg:px-8">
@@ -632,7 +784,7 @@ export default function App() {
                 <span className="text-[#FFC107] text-sm font-medium">Trusted by 10,000+ professionals</span>
               </div>
 
-              {/* Headlines */}
+              {/* Headline */}
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight font-poppins">
                 <JobCandidateAnimation />
               </h1>
@@ -707,7 +859,7 @@ export default function App() {
         </main>
       )}
 
-      {/* About Us Section */}
+      {/* About + Mission (restored) */}
       {!user && !tempSignupData && currentPage === 'home' && (
         <section id="about" className="relative bg-gradient-to-br from-neutral-800 via-neutral-900 to-neutral-800 py-16 lg:py-24">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -724,7 +876,7 @@ export default function App() {
                 </span>
               </h2>
               <p className="text-xl text-gray-300 max-w-3xl mx-auto leading-relaxed">
-                We're revolutionizing the way people find jobs and companies discover talent. 
+                We're revolutionizing the way people find jobs and companies discover talent.
                 Our platform makes career connections as simple as a swipe.
               </p>
             </div>
@@ -738,7 +890,7 @@ export default function App() {
                 </div>
                 <h3 className="text-xl font-semibold text-white mb-4 font-poppins">For Job Seekers</h3>
                 <p className="text-gray-300 leading-relaxed mb-4">
-                  Discover your dream job through our intuitive matching system. Swipe through opportunities 
+                  Discover your dream job through our intuitive matching system. Swipe through opportunities
                   tailored to your skills and preferences.
                 </p>
                 <ul className="space-y-2 text-sm text-gray-400">
@@ -764,7 +916,7 @@ export default function App() {
                 </div>
                 <h3 className="text-xl font-semibold text-white mb-4 font-poppins">For Employers</h3>
                 <p className="text-gray-300 leading-relaxed mb-4">
-                  Find the perfect candidates faster than ever. Our platform connects you with 
+                  Find the perfect candidates faster than ever. Our platform connects you with
                   pre-qualified talent that matches your requirements.
                 </p>
                 <ul className="space-y-2 text-sm text-gray-400">
@@ -787,9 +939,7 @@ export default function App() {
             {/* Mission Statement */}
             <div className="text-center">
               <div className="bg-gradient-to-r from-red-600/10 to-[#FFC107]/10 rounded-3xl p-12 border border-red-600/20">
-                <h3 className="text-2xl sm:text-3xl font-bold text-white mb-6 font-poppins">
-                  Our Mission
-                </h3>
+                <h3 className="text-2xl sm:text-3xl font-bold text-white mb-6 font-poppins">Our Mission</h3>
                 <p className="text-lg text-gray-300 max-w-4xl mx-auto leading-relaxed">
                   We created TalentBook to help people and companies find their perfect match.
                   <br /><br />
@@ -809,106 +959,58 @@ export default function App() {
         </section>
       )}
 
-      {/* Pricing Section */}
+      {/* Pricing (Stripe-driven) */}
       {!user && !tempSignupData && currentPage === 'home' && (
-        <section id="pricing" className="relative bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900 -mt-8">
-          <Pricing
-            title="Choose Your Plan"
-            description="Find the perfect plan for your needs. Whether you're a job seeker or employer, we have options that scale with you."
-            plans={[
-              {
-                name: "JOB SEEKER",
-                price: "0",
-                yearlyPrice: "0",
-                period: "forever",
-                features: [
-                  "Unlimited job applications",
-                  "AI-powered profile creation",
-                  "Smart job matching",
-                  "Direct messaging with employers",
-                  "Mobile app access",
-                  "Basic analytics",
-                ],
-                description: "Perfect for professionals looking for their next opportunity",
-                buttonText: "Get Started Free",
-                href: "/sign-up",
-                isPopular: false,
-                userType: "job_seeker",
-              },
-              {
-                name: "STARTER",
-                price: "600",
-                yearlyPrice: "480",
-                period: "month",
-                features: [
-                  "3 active job posts simultaneously",
-                  "1 recruiter seat",
-                  "Up to 50 profile views/month",
-                  "200 connection invites/month",
-                  "Email support (48h SLA)",
-                  "7 days free trial",
-                  "One-time mini-package option available",
-                ],
-                description: "Perfect for small companies starting their hiring journey",
-                buttonText: "Start 7-Day Free Trial",
-                href: "/sign-up",
-                isPopular: false,
-                userType: "employer",
-              },
-              {
-                name: "GROWTH",
-                price: "1500",
-                yearlyPrice: "1200",
-                period: "month",
-                features: [
-                  "6 active job posts",
-                  "Silver promotion included (€500 value)",
-                  "200 InMails/month included (€1,000 value)",
-                  "3 recruiter seats",
-                  "Up to 300 profile views/month",
-                  "1,000 connection invites/month",
-                  "Email + chat support (24h SLA)",
-                  "10% discount on additional packages",
-                ],
-                description: "Ideal for growing companies and HR teams",
-                buttonText: "Start Free Trial",
-                href: "/sign-up",
-                isPopular: true,
-                userType: "employer",
-              },
-              {
-                name: "SCALE (UNLIMITED)",
-                price: "5000",
-                yearlyPrice: "5000",
-                period: "year",
-                features: [
-                  "Unlimited job posts (up to 25 active)",
-                  "5 recruiter seats",
-                  "Advanced search + shortlist export",
-                  "Dedicated account manager",
-                  "25% discount on promo packages",
-                  "Annual promotion bundle available",
-                  "Priority support (4h SLA)",
-                  "Quarterly business reviews",
-                ],
-                description: "For large organizations with specific requirements",
-                buttonText: "Contact Sales",
-                href: "/contact",
-                isPopular: false,
-                userType: "employer",
-              },
-            ]}
-          />
+<section id="pricing" className="relative bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900 -mt-8">
+  <Pricing
+    title="Choose Your Plan"
+    description="Find the perfect plan for your needs. Whether you're a job seeker or employer, we have options that scale with you."
+    user={user}
+  openSignup={openSignup}
+    plans={[
+      {
+        // Popular
+        name: "EMPLOYER GROWTH",
+        price: "1500",          // monthly price
+        yearlyPrice: "14400",   // yearly price (billed annually)
+        period: "month",        // the component will override the label with 'year' when annual is on (see fix below)
+        features: [
+          "Enhanced recruiting capabilities",
+          "Priority support",
+        ],
+        description: "Enhanced recruiting capabilities with priority support",
+        buttonText: "Get Started",
+        href: "/sign-up",
+        isPopular: true,
+        userType: "employer",
+      },
+      {
+        name: "EMPLOYER SCALE (UNLIMITED)",
+        price: "5000",
+        yearlyPrice: "48000",
+        period: "month",
+        features: [
+          "Unlimited job posts",
+          "Advanced recruiting tools for large enterprises",
+        ],
+        description: "Unlimited job posts and advanced recruiting tools for large enterprises.",
+        buttonText: "Get Started",
+        href: "/sign-up",
+        isPopular: false,
+        userType: "employer",
+      },
+    ]}
+  />
 
-          {/* Background Elements */}
-          <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-red-600/5 rounded-full blur-3xl"></div>
-            <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-[#FFC107]/5 rounded-full blur-3xl"></div>
-          </div>
-        </section>
+  {/* Background */}
+  <div className="absolute inset-0 overflow-hidden pointer-events-none">
+    <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-red-600/5 rounded-full blur-3xl"></div>
+    <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-[#FFC107]/5 rounded-full blur-3xl"></div>
+  </div>
+</section>
       )}
 
-      {/* Contact Section */}
+      {/* Contact (restored) */}
       {!user && !tempSignupData && currentPage === 'home' && (
         <section id="contact" className="relative bg-gradient-to-br from-neutral-800 via-neutral-900 to-neutral-800 py-16 lg:py-24">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -921,7 +1023,7 @@ export default function App() {
                 Do you want to ask a question?
               </h2>
               <p className="text-xl text-gray-300 max-w-3xl mx-auto leading-relaxed">
-                Have questions about TalentBook? Want to learn more about our enterprise solutions? 
+                Have questions about TalentBook? Want to learn more about our enterprise solutions?
                 We'd love to hear from you.
               </p>
             </div>
@@ -934,9 +1036,7 @@ export default function App() {
                 <form className="space-y-6">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label htmlFor="firstName" className="block text-sm font-medium text-gray-300 mb-2">
-                        First Name
-                      </label>
+                      <label htmlFor="firstName" className="block text-sm font-medium text-gray-300 mb-2">First Name</label>
                       <input
                         type="text"
                         id="firstName"
@@ -945,9 +1045,7 @@ export default function App() {
                       />
                     </div>
                     <div>
-                      <label htmlFor="lastName" className="block text-sm font-medium text-gray-300 mb-2">
-                        Last Name
-                      </label>
+                      <label htmlFor="lastName" className="block text-sm font-medium text-gray-300 mb-2">Last Name</label>
                       <input
                         type="text"
                         id="lastName"
@@ -957,9 +1055,7 @@ export default function App() {
                     </div>
                   </div>
                   <div>
-                    <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">
-                      Email
-                    </label>
+                    <label htmlFor="email" className="block text-sm font-medium text-gray-300 mb-2">Email</label>
                     <input
                       type="email"
                       id="email"
@@ -968,9 +1064,7 @@ export default function App() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="company" className="block text-sm font-medium text-gray-300 mb-2">
-                      Company (Optional)
-                    </label>
+                    <label htmlFor="company" className="block text-sm font-medium text-gray-300 mb-2">Company (Optional)</label>
                     <input
                       type="text"
                       id="company"
@@ -979,9 +1073,7 @@ export default function App() {
                     />
                   </div>
                   <div>
-                    <label htmlFor="message" className="block text-sm font-medium text-gray-300 mb-2">
-                      Message
-                    </label>
+                    <label htmlFor="message" className="block text-sm font-medium text-gray-300 mb-2">Message</label>
                     <textarea
                       id="message"
                       rows={4}
@@ -998,7 +1090,7 @@ export default function App() {
                 </form>
               </div>
 
-              {/* Contact Information */}
+              {/* Contact Information + Quick Help */}
               <div className="space-y-8">
                 <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-8 border border-white/10">
                   <h3 className="text-2xl font-semibold text-white mb-6 font-poppins">Contact Information</h3>
@@ -1063,62 +1155,27 @@ export default function App() {
       {/* Footer */}
       {currentPage === 'home' && (
         <footer className="relative bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900 py-8 border-t border-white/10">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0">
-            {/* Logo and Copyright */}
-            <div className="flex items-center space-x-4">
-              <span className="text-gray-400 text-sm">
-                © 2025 TalentBook. All rights reserved.
-              </span>
-            </div>
-
-            {/* Links */}
-            <div className="flex items-center space-x-6">
-              <a 
-                href="/privacy-terms" 
-                onClick={(e) => {
-                  e.preventDefault();
-                  setIsPrivacyTermsModalOpen(true);
-                }}
-                className="text-gray-400 hover:text-[#FFC107] transition-colors duration-200 text-sm"
-              >
-                Privacy Policy and Terms of Use
-              </a>
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex flex-col md:flex-row items-center justify-between space-y-4 md:space-y-0">
+              <div className="flex items-center space-x-4">
+                <span className="text-gray-400 text-sm">© 2025 TalentBook. All rights reserved.</span>
+              </div>
+              <div className="flex items-center space-x-6">
+                <a
+                  href="/privacy-terms"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    openPrivacy()
+                  }}
+                  className="text-gray-400 hover:text-[#FFC107] transition-colors duration-200 text-sm"
+                >
+                  Privacy Policy and Terms of Use
+                </a>
+              </div>
             </div>
           </div>
-        </div>
         </footer>
       )}
-
-      {/* Signup Modal */}
-      <SignupModal 
-        isOpen={isSignupModalOpen} 
-        onClose={() => setIsSignupModalOpen(false)} 
-        onSwitchToLogin={() => setIsLoginModalOpen(true)}
-        onContinueSignup={handleContinueSignup}
-        onOpenPrivacyTerms={() => setIsPrivacyTermsModalOpen(true)}
-      />
-
-      {/* Login Modal */}
-      <LoginModal 
-        isOpen={isLoginModalOpen} 
-        onClose={() => setIsLoginModalOpen(false)} 
-        onSwitchToSignup={() => setIsSignupModalOpen(true)}
-      />
-
-      {/* Job Details Modal */}
-      <JobDetailsModal
-        isOpen={isJobDetailsModalOpen}
-        onClose={() => setIsJobDetailsModalOpen(false)}
-        job={selectedJob}
-        userId={user?.id || null}
-      />
-
-      {/* Privacy Terms Modal */}
-      <PrivacyTermsModal
-        isOpen={isPrivacyTermsModalOpen}
-        onClose={() => setIsPrivacyTermsModalOpen(false)}
-      />
     </div>
-  );
+  )
 }

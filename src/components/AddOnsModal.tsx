@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Modal } from './ui/modal'
 import { Button } from './ui/button'
+import { StripeCheckout } from './StripeCheckout'
 import { 
   Zap, 
   Star, 
@@ -16,193 +17,128 @@ import {
   Globe,
   Lock
 } from 'lucide-react'
+import { stripeProducts, getProductsByCategory, formatPrice } from '../stripe-config'
 
 interface AddOnsModalProps {
   isOpen: boolean
   onClose: () => void
 }
 
-interface AddOn {
-  id: string
-  name: string
-  price: string
-  period: string
-  description: string
-  features: string[]
-  category: 'promotion' | 'outreach' | 'enterprise'
-  icon: React.ReactNode
-  popular?: boolean
-  premium?: boolean
-}
 
 export function AddOnsModal({ isOpen, onClose }: AddOnsModalProps) {
   const [selectedCategory, setSelectedCategory] = useState<'promotion' | 'outreach' | 'enterprise'>('promotion')
+  const [checkoutError, setCheckoutError] = useState<string | null>(null)
 
-  const addOns: AddOn[] = [
-    // Promotion Add-ons
-    {
-      id: 'silver-promotion',
-      name: 'Silver Promotion',
-      price: '€500',
-      period: 'month',
-      description: 'Boost visibility for all your job posts',
-      features: [
+  // Get add-ons from Stripe config
+  const getAddOnsForCategory = (category: 'promotion' | 'outreach' | 'enterprise') => {
+    return getProductsByCategory(category).map(product => ({
+      ...product,
+      icon: getIconForProduct(product.name),
+      features: getFeaturesForProduct(product.name)
+    }))
+  }
+
+  const getIconForProduct = (name: string) => {
+    if (name.includes('Silver')) return <Star className="w-6 h-6" />
+    if (name.includes('Gold')) return <Crown className="w-6 h-6" />
+    if (name.includes('Diamond')) return <Diamond className="w-6 h-6" />
+    if (name.includes('Platinum')) return <Sparkles className="w-6 h-6" />
+    if (name.includes('Annual')) return <Target className="w-6 h-6" />
+    if (name.includes('InMails')) return <Mail className="w-6 h-6" />
+    if (name.includes('Unlimited')) return <Users className="w-6 h-6" />
+    if (name.includes('Leaderboard')) return <Trophy className="w-6 h-6" />
+    if (name.includes('Enterprise Connect')) return <Shield className="w-6 h-6" />
+    return <Zap className="w-6 h-6" />
+  }
+
+  const getFeaturesForProduct = (name: string): string[] => {
+    // Define features based on product name
+    if (name.includes('Silver')) {
+      return [
         'Enhanced job post visibility',
         'Priority placement in search results',
         'Applies to all job posts in account',
         'Monthly billing'
-      ],
-      category: 'promotion',
-      icon: <Star className="w-6 h-6" />
-    },
-    {
-      id: 'gold-promotion',
-      name: 'Gold Promotion',
-      price: '€1,000',
-      period: 'month',
-      description: 'Premium visibility with advanced features',
-      features: [
+      ]
+    }
+    if (name.includes('Gold')) {
+      return [
         'All Silver features',
         'Featured job post badges',
         'Higher search ranking',
         'Enhanced company branding'
-      ],
-      category: 'promotion',
-      icon: <Crown className="w-6 h-6" />,
-      popular: true
-    },
-    {
-      id: 'diamond-promotion',
-      name: 'Diamond Promotion',
-      price: '€1,500',
-      period: 'month',
-      description: 'Maximum exposure for your opportunities',
-      features: [
+      ]
+    }
+    if (name.includes('Diamond')) {
+      return [
         'All Gold features',
         'Top-tier placement guarantee',
         'Premium company spotlight',
         'Advanced analytics dashboard'
-      ],
-      category: 'promotion',
-      icon: <Diamond className="w-6 h-6" />
-    },
-    {
-      id: 'platinum-promotion',
-      name: 'Platinum Promotion',
-      price: '€2,000',
-      period: 'month',
-      description: 'Ultimate promotion package',
-      features: [
+      ]
+    }
+    if (name.includes('Platinum')) {
+      return [
         'All Diamond features',
         'Exclusive placement zones',
         'Dedicated account manager',
         'Custom branding options'
-      ],
-      category: 'promotion',
-      icon: <Sparkles className="w-6 h-6" />,
-      premium: true
-    },
-    {
-      id: 'annual-promotion',
-      name: 'Annual Promotion',
-      price: '€10,000',
-      period: 'year',
-      description: 'Best value for year-round visibility',
-      features: [
+      ]
+    }
+    if (name.includes('Annual')) {
+      return [
         'Equivalent to Gold level monthly',
         'Significant cost savings',
         'Consistent year-round promotion',
         'Priority customer support'
-      ],
-      category: 'promotion',
-      icon: <Target className="w-6 h-6" />
-    },
-
-    // Outreach Add-ons
-    {
-      id: 'inmails-200',
-      name: 'InMails - 200 pieces',
-      price: '€1,000',
-      period: 'month',
-      description: 'Direct messaging to potential candidates',
-      features: [
+      ]
+    }
+    if (name.includes('InMails 200')) {
+      return [
         '200 InMail messages per month',
         'Direct candidate outreach',
         'Cap: 50 messages per day per seat',
         'Message templates included'
-      ],
-      category: 'outreach',
-      icon: <Mail className="w-6 h-6" />
-    },
-    {
-      id: 'inmails-500',
-      name: 'InMails - 500 pieces',
-      price: '€1,500',
-      period: 'month',
-      description: 'Extended messaging for active recruiting',
-      features: [
+      ]
+    }
+    if (name.includes('InMails 500')) {
+      return [
         '500 InMail messages per month',
         'Advanced candidate targeting',
         'Cap: 50 messages per day per seat',
         'Priority message delivery',
         'Advanced analytics'
-      ],
-      category: 'outreach',
-      icon: <Mail className="w-6 h-6" />,
-      popular: true
-    },
-    {
-      id: 'unlimited-connections',
-      name: 'Unlimited Connection Invites',
-      price: '€25,000',
-      period: 'year',
-      description: 'Connect with unlimited professionals',
-      features: [
+      ]
+    }
+    if (name.includes('Unlimited')) {
+      return [
         'Unlimited connection requests',
         'Cap: 50 invites per day per seat',
         'Fair-use protections included',
         'Network expansion tools',
         'Connection analytics'
-      ],
-      category: 'outreach',
-      icon: <Users className="w-6 h-6" />
-    },
-
-    // Enterprise Add-ons
-    {
-      id: 'brand-leaderboard',
-      name: 'Top 100 Brand Leaderboard',
-      price: '€100,000',
-      period: 'year',
-      description: 'Elite brand visibility and recognition',
-      features: [
+      ]
+    }
+    if (name.includes('Leaderboard')) {
+      return [
         'Featured in Top 100 Brand Leaderboard',
         'Premium brand positioning',
         'Enhanced company visibility',
         'Exclusive networking opportunities',
         'Quarterly brand reports'
-      ],
-      category: 'enterprise',
-      icon: <Trophy className="w-6 h-6" />,
-      premium: true
-    },
-    {
-      id: 'enterprise-connect',
-      name: 'Enterprise Connect',
-      price: '€50,000',
-      period: '6 months',
-      description: 'GDPR-safe contact access with premium support',
-      features: [
+      ]
+    }
+    if (name.includes('Enterprise Connect')) {
+      return [
         'Double opt-in Contact Reveal',
         'GDPR-compliant contact access',
         'Dedicated support team',
         'Priority campaign management',
         'Advanced compliance tools'
-      ],
-      category: 'enterprise',
-      icon: <Shield className="w-6 h-6" />
+      ]
     }
-  ]
+    return ['Premium features included']
+  }
 
   const categories = [
     { id: 'promotion', name: 'Promotion', icon: <Zap className="w-5 h-5" /> },
@@ -210,9 +146,9 @@ export function AddOnsModal({ isOpen, onClose }: AddOnsModalProps) {
     { id: 'enterprise', name: 'Enterprise', icon: <Globe className="w-5 h-5" /> }
   ] as const
 
-  const filteredAddOns = addOns.filter(addon => addon.category === selectedCategory)
+  const filteredAddOns = getAddOnsForCategory(selectedCategory)
 
-  const getAddOnCardStyle = (addon: AddOn) => {
+  const getAddOnCardStyle = (addon: any) => {
     if (addon.premium) {
       return 'bg-gradient-to-br from-purple-600/20 to-purple-700/10 border-purple-500/40 hover:border-purple-400/60'
     }
@@ -222,7 +158,7 @@ export function AddOnsModal({ isOpen, onClose }: AddOnsModalProps) {
     return 'bg-white/5 border-white/10 hover:border-white/30'
   }
 
-  const getIconStyle = (addon: AddOn) => {
+  const getIconStyle = (addon: any) => {
     if (addon.premium) {
       return 'bg-gradient-to-br from-purple-600 to-purple-700 text-white'
     }
@@ -232,7 +168,7 @@ export function AddOnsModal({ isOpen, onClose }: AddOnsModalProps) {
     return 'bg-gradient-to-br from-blue-600 to-blue-700 text-white'
   }
 
-  const getBadge = (addon: AddOn) => {
+  const getBadge = (addon: any) => {
     if (addon.premium) {
       return (
         <div className="absolute -top-2 -right-2 bg-gradient-to-r from-purple-600 to-purple-700 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center space-x-1">
@@ -252,6 +188,10 @@ export function AddOnsModal({ isOpen, onClose }: AddOnsModalProps) {
     return null
   }
 
+  const handleCheckoutError = (error: string) => {
+    setCheckoutError(error)
+    setTimeout(() => setCheckoutError(null), 5000) // Clear error after 5 seconds
+  }
   return (
     <Modal 
       isOpen={isOpen} 
@@ -272,6 +212,12 @@ export function AddOnsModal({ isOpen, onClose }: AddOnsModalProps) {
           </p>
         </div>
 
+        {/* Error Message */}
+        {checkoutError && (
+          <div className="mb-6 bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+            <p className="text-red-400 text-sm">{checkoutError}</p>
+          </div>
+        )}
         {/* Category Tabs */}
         <div className="flex justify-center mb-8">
           <div className="bg-white/5 backdrop-blur-sm rounded-2xl p-2 border border-white/10 flex items-center space-x-2">
@@ -320,10 +266,10 @@ export function AddOnsModal({ isOpen, onClose }: AddOnsModalProps) {
                 {/* Pricing */}
                 <div className="flex items-baseline space-x-2">
                   <span className="text-3xl font-bold text-white">
-                    {addon.price}
+                    {formatPrice(addon.price, addon.currency)}
                   </span>
                   <span className="text-gray-400 text-sm">
-                    / {addon.period}
+                    {addon.mode === 'subscription' ? '/ month' : 'one-time'}
                   </span>
                 </div>
 
@@ -338,7 +284,9 @@ export function AddOnsModal({ isOpen, onClose }: AddOnsModalProps) {
                 </div>
 
                 {/* Action Button */}
-                <Button
+                <StripeCheckout
+                  product={addon}
+                  onError={handleCheckoutError}
                   className={`w-full py-3 rounded-lg font-semibold transition-all duration-200 ${
                     addon.premium
                       ? 'bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800 text-white'
@@ -347,8 +295,8 @@ export function AddOnsModal({ isOpen, onClose }: AddOnsModalProps) {
                       : 'bg-white/10 hover:bg-white/20 text-white border border-white/20'
                   }`}
                 >
-                  {addon.premium ? 'Contact Sales' : 'Add to Plan'}
-                </Button>
+                  {addon.premium ? 'Contact Sales' : 'Purchase'}
+                </StripeCheckout>
               </div>
             </div>
           ))}
