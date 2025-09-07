@@ -14,6 +14,7 @@ import NumberFlow from "@number-flow/react";
 import { Briefcase, Users, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { stripeProducts, getProductsByCategory, formatPrice } from "../../stripe-config";
+import { User } from "@supabase/supabase-js";
 
 interface PricingPlan {
   name: string;
@@ -32,6 +33,8 @@ interface PricingProps {
   plans?: PricingPlan[];
   title?: string;
   description?: string;
+  user?: User | null;
+  openSignup?: () => void;
   onViewAddOns?: () => void;
 }
 
@@ -39,6 +42,8 @@ export function Pricing({
   plans = [],
   title = "Simple, Transparent Pricing",
   description = "Choose the plan that works for you\nAll plans include access to our platform, lead generation tools, and dedicated support.",
+  user,
+  openSignup,
   onViewAddOns,
 }: PricingProps) {
   const [isMonthly, setIsMonthly] = useState(true);
@@ -46,6 +51,37 @@ export function Pricing({
   const switchRef = useRef<HTMLButtonElement>(null);
   const [selectedUserType, setSelectedUserType] = useState<'job_seeker' | 'employer'>('job_seeker');
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+
+  // Define the free plan
+  const freePlan = {
+    id: 'free-plan',
+    priceId: 'free',
+    name: 'Free Plan',
+    description: selectedUserType === 'job_seeker' 
+      ? 'Perfect for getting started with job searching. Create your profile and start browsing opportunities.'
+      : 'Ideal for small businesses to get started. Post your first job and find great candidates.',
+    mode: 'payment' as const,
+    price: 0,
+    currency: 'eur',
+    category: 'subscription' as const,
+    features: selectedUserType === 'job_seeker' 
+      ? [
+          'Create and customize your professional profile',
+          'Browse and search through job listings',
+          'Save jobs for later review',
+          'Apply to unlimited job positions',
+          'Basic profile visibility to employers',
+          'Access to platform messaging system'
+        ]
+      : [
+          'Create and manage your company profile',
+          'Post up to 1 job listing per month',
+          'Browse candidate profiles',
+          'Receive and manage job applications',
+          'Basic company visibility',
+          'Access to applicant tracking system'
+        ]
+  };
 
   const handleToggle = (checked: boolean) => {
     setIsMonthly(!checked);
@@ -77,7 +113,7 @@ export function Pricing({
   };
 
   // Get subscription plans from Stripe config
-  const subscriptionPlans = getProductsByCategory('subscription').filter(product => {
+  const paidSubscriptionPlans = getProductsByCategory('subscription').filter(product => {
     // Filter by user type based on product name
     if (selectedUserType === 'job_seeker') {
       return product.name.includes('Candidates')
@@ -154,7 +190,73 @@ export function Pricing({
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        {subscriptionPlans.map((plan, index) => (
+        {/* Free Plan */}
+        <motion.div
+          initial={{ y: 50, opacity: 0 }}
+          whileInView={{ y: 0, opacity: 1 }}
+          viewport={{ once: true }}
+          transition={{
+            duration: 1.6,
+            type: "spring",
+            stiffness: 100,
+            damping: 30,
+            delay: 0.2,
+            opacity: { duration: 0.5 },
+          }}
+          className="rounded-2xl border border-white/20 p-8 bg-white/5 backdrop-blur-sm text-center lg:flex lg:flex-col lg:justify-center relative flex flex-col"
+        >
+          <div className="flex-1 flex flex-col">
+            <p className="text-base font-semibold text-gray-300 uppercase tracking-wide">
+              {freePlan.name}
+            </p>
+            <div className="mt-6 flex items-center justify-center gap-x-2">
+              <span className="text-5xl font-bold tracking-tight text-white">
+                €0
+              </span>
+              <span className="text-sm font-semibold leading-6 tracking-wide text-gray-400">
+                / month
+              </span>
+            </div>
+
+            <p className="text-xs leading-5 text-gray-400 mb-6">
+              forever free
+            </p>
+
+            <ul className="mt-5 gap-3 flex flex-col">
+              {freePlan.features.map((feature, idx) => (
+                <li key={idx} className="flex items-start gap-3">
+                  <Check className="h-5 w-5 text-red-400 mt-0.5 flex-shrink-0" />
+                  <span className="text-left text-gray-300">{feature}</span>
+                </li>
+              ))}
+            </ul>
+
+            <hr className="w-full my-6 border-white/20" />
+
+                delay: 0.4 + (index * 0.1),
+              onClick={user ? undefined : openSignup}
+              disabled={!!user}
+              className={cn(
+                buttonVariants({
+                  variant: "outline",
+                }),
+                "group relative w-full gap-2 overflow-hidden text-lg font-semibold tracking-tighter",
+                "transform-gpu ring-offset-current transition-all duration-300 ease-out",
+                (paidSubscriptionPlans.length === 2 && (index === 0 || index === 1)) || (paidSubscriptionPlans.length === 3 && (index === 0 || index === 2))
+                  ? "bg-gray-600 text-gray-300 border-gray-600 cursor-not-allowed"
+                  : "bg-transparent text-white border-white/30 hover:bg-[#FFC107] hover:text-black hover:border-[#FFC107] hover:ring-2 hover:ring-[#FFC107] hover:ring-offset-1"
+              )}
+            >
+              {user ? 'Current Plan' : 'Get Started Free'}
+            </Button>
+            <p className="mt-4 text-xs leading-5 text-gray-400">
+              {freePlan.description}
+            </p>
+          </div>
+        </motion.div>
+
+        {/* Paid Plans */}
+        {paidSubscriptionPlans.map((plan, index) => (
           <motion.div
             key={index}
             initial={{ y: 50, opacity: 0 }}
@@ -163,8 +265,8 @@ export function Pricing({
                 ? {
                     y: plan.isPopular ? -20 : 0,
                     opacity: 1,
-                    x: subscriptionPlans.length === 3 ? (index === 2 ? -30 : index === 0 ? 30 : 0) : 0,
-                    scale: subscriptionPlans.length === 3 && (index === 0 || index === 2) ? 0.94 : 1.0,
+                    x: paidSubscriptionPlans.length === 2 ? (index === 1 ? -30 : 30) : paidSubscriptionPlans.length === 3 ? (index === 2 ? -30 : index === 0 ? 30 : 0) : 0,
+                    scale: (paidSubscriptionPlans.length === 2 && (index === 0 || index === 1)) || (paidSubscriptionPlans.length === 3 && (index === 0 || index === 2)) ? 0.94 : 1.0,
                   }
                 : { y: 0, opacity: 1 }
             }
