@@ -23,7 +23,10 @@ import { UserProfileEditModal } from './UserProfileEditModal'
 import { SavedJobsModal } from './SavedJobsModal'
 import { JobDetailsModal } from './JobDetailsModal'
 import { ShareProfileModal } from './ShareProfileModal'
+import { StripeCheckout } from './StripeCheckout'
+import { SubscriptionStatus } from './SubscriptionStatus'
 import { supabase } from '../lib/supabase'
+import { getProductsByCategory } from '../stripe-config'
 
 // TypeScript interfaces for the data structures
 interface ProfileFile {
@@ -70,6 +73,7 @@ export function UserProfileView({ onSignOut }: UserProfileViewProps) {
   const [showShareProfileModal, setShowShareProfileModal] = useState(false)
   const [selectedJobForDetails, setSelectedJobForDetails] = useState<any>(null)
   const [showJobDetailsModal, setShowJobDetailsModal] = useState(false)
+  const [checkoutError, setCheckoutError] = useState<string | null>(null)
   const [profileData, setProfileData] = useState<ProfileData | null>(null)
   const [jobExperiences, setJobExperiences] = useState<JobExperience[]>([])
   const [loading, setLoading] = useState(true)
@@ -239,6 +243,14 @@ export function UserProfileView({ onSignOut }: UserProfileViewProps) {
     setShowSavedJobsModal(true) // Return to saved jobs modal
   }
 
+  const handleCheckoutError = (error: string) => {
+    setCheckoutError(error)
+    setTimeout(() => setCheckoutError(null), 5000)
+  }
+
+  // Get relevant products for job seekers
+  const verificationProduct = getProductsByCategory('verification')[0]
+  const spotlightProduct = getProductsByCategory('boost')[0]
   // Loading state
   if (loading) {
     return (
@@ -308,6 +320,11 @@ export function UserProfileView({ onSignOut }: UserProfileViewProps) {
                       <span>Connections: {profileData.connections}</span>
                     </div>
                   )}
+                </div>
+
+                {/* Subscription Status */}
+                <div className="mt-4">
+                  <SubscriptionStatus />
                 </div>
 
                 {/* Action Buttons - Top Row */}
@@ -428,7 +445,58 @@ export function UserProfileView({ onSignOut }: UserProfileViewProps) {
         )}
 
         {/* Action Buttons Grid */}
+        {/* Error Message */}
+        {checkoutError && (
+          <div className="mb-8 bg-red-500/10 border border-red-500/20 rounded-lg p-4">
+            <p className="text-red-400 text-sm text-center">{checkoutError}</p>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+          {/* Account Verification */}
+          {verificationProduct && (
+            <div className="bg-gradient-to-br from-white/10 to-white/5 hover:from-green-600/20 hover:to-green-700/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20 hover:border-green-500/50 transition-all duration-300 hover:shadow-xl hover:shadow-green-600/10 hover:-translate-y-1 group">
+              <div className="flex items-center space-x-4 mb-4">
+                <div className="w-14 h-14 bg-gradient-to-br from-green-600 to-green-700 rounded-2xl flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-green-600/30">
+                  <Shield className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-left flex-1">
+                  <h3 className="text-white font-semibold text-lg group-hover:text-green-400 transition-colors duration-300">Account Verification</h3>
+                  <p className="text-gray-400 text-sm group-hover:text-gray-300 transition-colors duration-300">Build trust with employers</p>
+                </div>
+              </div>
+              <StripeCheckout
+                product={verificationProduct}
+                onError={handleCheckoutError}
+                className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium"
+              >
+                Verify for €1.00
+              </StripeCheckout>
+            </div>
+          )}
+
+          {/* Spotlight Boost */}
+          {spotlightProduct && (
+            <div className="bg-gradient-to-br from-white/10 to-white/5 hover:from-[#FFC107]/20 hover:to-[#FFB300]/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20 hover:border-[#FFC107]/50 transition-all duration-300 hover:shadow-xl hover:shadow-[#FFC107]/10 hover:-translate-y-1 group">
+              <div className="flex items-center space-x-4 mb-4">
+                <div className="w-14 h-14 bg-gradient-to-br from-[#FFC107] to-[#FFB300] rounded-2xl flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-[#FFC107]/30">
+                  <Zap className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-left flex-1">
+                  <h3 className="text-white font-semibold text-lg group-hover:text-[#FFC107] transition-colors duration-300">Spotlight Boost</h3>
+                  <p className="text-gray-400 text-sm group-hover:text-gray-300 transition-colors duration-300">Get noticed by employers</p>
+                </div>
+              </div>
+              <StripeCheckout
+                product={spotlightProduct}
+                onError={handleCheckoutError}
+                className="w-full bg-[#FFC107] hover:bg-[#FFB300] text-black px-4 py-2 rounded-lg font-medium"
+              >
+                Boost for €4.99
+              </StripeCheckout>
+            </div>
+          )}
+
           {/* Documents Section */}
           <button 
             onClick={() => {
