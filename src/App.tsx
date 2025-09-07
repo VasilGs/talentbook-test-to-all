@@ -321,7 +321,7 @@ export default function App() {
 
   const handleLogoClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    setCurrentPage('home');
+    navigate('/');
   };
 
   const handleUserNameClick = (e: React.MouseEvent) => {
