@@ -28,10 +28,7 @@ import { ApplicationsDashboardModal } from './ApplicationsDashboardModal'
 import { ApplicantDetailsModal } from './ApplicantDetailsModal'
 import { DeleteConfirmationModal } from './DeleteConfirmationModal'
 import { AddOnsModal } from './AddOnsModal'
-import { StripeCheckout } from './StripeCheckout'
-import { SubscriptionStatus } from './SubscriptionStatus'
 import { supabase } from '../lib/supabase'
-import { getProductsByCategory } from '../stripe-config'
 
 interface CompanyData {
   id: string
@@ -66,7 +63,6 @@ export function CompanyProfileView({ company, onUpdateSuccess, onSignOut }: Comp
   const [showApplicantDetailsModal, setShowApplicantDetailsModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [showAddOnsModal, setShowAddOnsModal] = useState(false)
-  const [checkoutError, setCheckoutError] = useState<string | null>(null)
   const [selectedApplicationId, setSelectedApplicationId] = useState<string>('')
   const [selectedApplicantId, setSelectedApplicantId] = useState<string>('')
   
@@ -172,14 +168,6 @@ export function CompanyProfileView({ company, onUpdateSuccess, onSignOut }: Comp
     }
   }
 
-  const handleCheckoutError = (error: string) => {
-    setCheckoutError(error)
-    setTimeout(() => setCheckoutError(null), 5000)
-  }
-
-  // Get relevant products for companies
-  const jobPostsProduct = getProductsByCategory('job_posts')[0]
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-neutral-900 via-neutral-800 to-neutral-900 py-8">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -218,7 +206,12 @@ export function CompanyProfileView({ company, onUpdateSuccess, onSignOut }: Comp
                   )}
                   {company.subscription_package && (
                     <div className="flex items-center mb-3">
-                      <SubscriptionStatus />
+                      <div className={`bg-gradient-to-r ${getSubscriptionColor(company.subscription_package)} px-3 py-1 rounded-full flex items-center space-x-2`}>
+                        <Crown className="w-4 h-4 text-white" />
+                        <span className="text-white text-sm font-medium">
+                          {getSubscriptionLabel(company.subscription_package)} Plan
+                        </span>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -423,36 +416,7 @@ export function CompanyProfileView({ company, onUpdateSuccess, onSignOut }: Comp
         </div>
 
         {/* Action Buttons Grid */}
-        {/* Error Message */}
-        {checkoutError && (
-          <div className="mb-8 bg-red-500/10 border border-red-500/20 rounded-lg p-4">
-            <p className="text-red-400 text-sm text-center">{checkoutError}</p>
-          </div>
-        )}
-
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-          {/* Purchase Job Posts */}
-          {jobPostsProduct && (
-            <div className="bg-gradient-to-br from-white/10 to-white/5 hover:from-blue-600/20 hover:to-blue-700/10 backdrop-blur-sm rounded-2xl p-6 border border-white/20 hover:border-blue-500/50 transition-all duration-300 hover:shadow-xl hover:shadow-blue-600/10 hover:-translate-y-1 group">
-              <div className="flex items-center space-x-4 mb-4">
-                <div className="w-14 h-14 bg-gradient-to-br from-blue-600 to-blue-700 rounded-2xl flex items-center justify-center group-hover:scale-110 group-hover:rotate-3 transition-all duration-300 shadow-lg shadow-blue-600/30">
-                  <FileText className="w-6 h-6 text-white" />
-                </div>
-                <div className="text-left flex-1">
-                  <h3 className="text-white font-semibold text-lg group-hover:text-blue-400 transition-colors duration-300">2 Job Posts</h3>
-                  <p className="text-gray-400 text-sm group-hover:text-gray-300 transition-colors duration-300">Add more job listings</p>
-                </div>
-              </div>
-              <StripeCheckout
-                product={jobPostsProduct}
-                onError={handleCheckoutError}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium"
-              >
-                Purchase for €500
-              </StripeCheckout>
-            </div>
-          )}
-
           {/* Post New Job */}
           <button 
             onClick={() => setShowJobPostModal(true)}
