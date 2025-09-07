@@ -22,16 +22,15 @@ interface JobExperience {
 }
 
 interface JobSeekerProfileCompletionProps {
-  signupData?: SignupData
+  signupData: SignupData
   onProfileComplete: () => void
 }
 
 export function JobSeekerProfileCompletion({ signupData, onProfileComplete }: JobSeekerProfileCompletionProps) {
-  const [user, setUser] = useState<any>(null)
   const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
+    firstName: signupData.name.split(' ')[0] || '',
+    lastName: signupData.name.split(' ').slice(1).join(' ') || '',
+    email: signupData.email,
     profilePicture: null as File | null,
     profilePictureUrl: '',
     description: ''
@@ -41,33 +40,6 @@ export function JobSeekerProfileCompletion({ signupData, onProfileComplete }: Jo
   const [files, setFiles] = useState<File[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  // Fetch user data if signupData is not provided
-  React.useEffect(() => {
-    const fetchUserData = async () => {
-      if (!signupData) {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          setUser(user)
-          const fullName = user.user_metadata?.full_name || ''
-          setFormData(prev => ({
-            ...prev,
-            firstName: fullName.split(' ')[0] || '',
-            lastName: fullName.split(' ').slice(1).join(' ') || '',
-            email: user.email || ''
-          }))
-        }
-      } else {
-        setFormData(prev => ({
-          ...prev,
-          firstName: signupData.name.split(' ')[0] || '',
-          lastName: signupData.name.split(' ').slice(1).join(' ') || '',
-          email: signupData.email
-        }))
-      }
-    }
-    fetchUserData()
-  }, [signupData])
 
   const addJobExperience = () => {
     const newJob: JobExperience = {
@@ -145,38 +117,27 @@ export function JobSeekerProfileCompletion({ signupData, onProfileComplete }: Jo
     setError(null)
 
     try {
-      let currentUser
-      
-      if (signupData) {
-        // First, create the user account
-        const { data: authData, error: authError } = await supabase.auth.signUp({
-          email: signupData.email,
-          password: signupData.password,
-          options: {
-            data: {
-              full_name: signupData.name,
-              user_type: signupData.userType,
-            }
+      // First, create the user account
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: signupData.email,
+        password: signupData.password,
+        options: {
+          data: {
+            full_name: signupData.name,
+            user_type: signupData.userType,
           }
-        })
-
-        if (authError) {
-          throw new Error(`Account creation failed: ${authError.message}`)
         }
+      })
 
-        if (!authData.user) {
-          throw new Error('Account creation failed: No user returned')
-        }
-
-        currentUser = authData.user
-      } else {
-        // Use existing authenticated user
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-          throw new Error('No authenticated user found')
-        }
-        currentUser = user
+      if (authError) {
+        throw new Error(`Account creation failed: ${authError.message}`)
       }
+
+      if (!authData.user) {
+        throw new Error('Account creation failed: No user returned')
+      }
+
+      const newUser = authData.user
 
       let profilePictureUrl = ''
       
@@ -187,7 +148,7 @@ export function JobSeekerProfileCompletion({ signupData, onProfileComplete }: Jo
           profilePictureUrl = uploadResult.publicUrl
           // Update the file path to include the actual user ID
           const fileExt = formData.profilePicture.name.split('.').pop()
-          const newFileName = `${currentUser.id}-${Date.now()}.${fileExt}`
+          const newFileName = `${newUser.id}-${Date.now()}.${fileExt}`
           const newFilePath = `profile-pictures/${newFileName}`
           
           // Move the file to the correct path with user ID
@@ -211,7 +172,7 @@ export function JobSeekerProfileCompletion({ signupData, onProfileComplete }: Jo
         if (uploadResult) {
           // Update the file path to include the actual user ID
           const fileExt = file.name.split('.').pop()
-          const newFileName = `${currentUser.id}-${Date.now()}.${fileExt}`
+          const newFileName = `${newUser.id}-${Date.now()}.${fileExt}`
           const newFilePath = `documents/${newFileName}`
           
           // Move the file to the correct path with user ID
@@ -239,7 +200,7 @@ export function JobSeekerProfileCompletion({ signupData, onProfileComplete }: Jo
       const { error: profileError } = await supabase
         .from('profiles')
         .upsert({
-          id: currentUser.id,
+          id: newUser.id,
           first_name: formData.firstName,
           last_name: formData.lastName,
           profile_picture: profilePictureUrl,
@@ -255,7 +216,7 @@ export function JobSeekerProfileCompletion({ signupData, onProfileComplete }: Jo
       // Insert job experiences into separate table
       if (jobExperiences.length > 0) {
         const experienceData = jobExperiences.map(job => ({
-          profile_id: currentUser.id,
+          profile_id: newUser.id,
           company_name: job.company,
           company_website: job.website,
           position_name: job.position,

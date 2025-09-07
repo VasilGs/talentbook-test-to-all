@@ -18,8 +18,7 @@ import {
   Users as UsersIcon, // Alias to avoid conflict with Users from lucide-react
   Award,
   BarChart3,
-  Calendar,
-  Zap
+  Calendar
 } from 'lucide-react'
 import { CompanyJobPostsModal } from './CompanyJobPostsModal'
 import { CompanyProfileEditModal } from './CompanyProfileEditModal'

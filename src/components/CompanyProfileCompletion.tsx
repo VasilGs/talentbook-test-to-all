@@ -13,15 +13,14 @@ interface SignupData {
 }
 
 interface CompanyProfileCompletionProps {
-  signupData?: SignupData
+  signupData: SignupData
   onProfileComplete: () => void
 }
 
 export function CompanyProfileCompletion({ signupData, onProfileComplete }: CompanyProfileCompletionProps) {
-  const [user, setUser] = useState<any>(null)
   const [formData, setFormData] = useState({
-    contactPersonName: '',
-    email: '',
+    contactPersonName: signupData.name,
+    email: signupData.email,
     companyLogo: null as File | null,
     companyLogoUrl: '',
     companyName: '',
@@ -38,30 +37,6 @@ export function CompanyProfileCompletion({ signupData, onProfileComplete }: Comp
   const [countryCode, setCountryCode] = useState('+1')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
-  // Fetch user data if signupData is not provided
-  React.useEffect(() => {
-    const fetchUserData = async () => {
-      if (!signupData) {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (user) {
-          setUser(user)
-          setFormData(prev => ({
-            ...prev,
-            contactPersonName: user.user_metadata?.full_name || '',
-            email: user.email || ''
-          }))
-        }
-      } else {
-        setFormData(prev => ({
-          ...prev,
-          contactPersonName: signupData.name,
-          email: signupData.email
-        }))
-      }
-    }
-    fetchUserData()
-  }, [signupData])
 
   const handleCompanyLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -105,38 +80,27 @@ export function CompanyProfileCompletion({ signupData, onProfileComplete }: Comp
     setError(null)
 
     try {
-      let currentUser
-      
-      if (signupData) {
-        // First, create the user account
-        const { data: authData, error: authError } = await supabase.auth.signUp({
-          email: signupData.email,
-          password: signupData.password,
-          options: {
-            data: {
-              full_name: signupData.name,
-              user_type: signupData.userType,
-            }
+      // First, create the user account
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: signupData.email,
+        password: signupData.password,
+        options: {
+          data: {
+            full_name: signupData.name,
+            user_type: signupData.userType,
           }
-        })
-
-        if (authError) {
-          throw new Error(`Account creation failed: ${authError.message}`)
         }
+      })
 
-        if (!authData.user) {
-          throw new Error('Account creation failed: No user returned')
-        }
-
-        currentUser = authData.user
-      } else {
-        // Use existing authenticated user
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) {
-          throw new Error('No authenticated user found')
-        }
-        currentUser = user
+      if (authError) {
+        throw new Error(`Account creation failed: ${authError.message}`)
       }
+
+      if (!authData.user) {
+        throw new Error('Account creation failed: No user returned')
+      }
+
+      const newUser = authData.user
 
       let companyLogoUrl = ''
       
@@ -147,7 +111,7 @@ export function CompanyProfileCompletion({ signupData, onProfileComplete }: Comp
           companyLogoUrl = uploadResult.publicUrl
           // Update the file path to include the actual user ID
           const fileExt = formData.companyLogo.name.split('.').pop()
-          const newFileName = `${currentUser.id}-${Date.now()}.${fileExt}`
+          const newFileName = `${newUser.id}-${Date.now()}.${fileExt}`
           const newFilePath = `company-logos/${newFileName}`
           
           // Move the file to the correct path with user ID
@@ -168,7 +132,7 @@ export function CompanyProfileCompletion({ signupData, onProfileComplete }: Comp
       const { error: companyError } = await supabase
         .from('companies')
         .insert({
-          user_id: currentUser.id,
+          user_id: newUser.id,
           company_name: formData.companyName,
           company_logo: companyLogoUrl,
           industry: formData.industry,
